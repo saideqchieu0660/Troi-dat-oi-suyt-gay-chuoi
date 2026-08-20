@@ -300,7 +300,7 @@ BẮT BUỘC TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY NHẤT (không bọc markdo
 
         for (const item of pool) {
           try {
-            if (item.provider === "cerebras" || item.provider === "groq") {
+            if (item.provider === "groq") {
               content = await fetchCerebrasDirect(
                 item.key,
                 [systemPrompt, userPrompt],
@@ -961,7 +961,7 @@ export function parseKeys(prefixes: string[]): string[] {
 
 export interface InterleavedKey {
   key: string;
-  provider: "openRouter" | "gemini" | "groq" | "deepInfra" | "cerebras";
+  provider: "openRouter" | "gemini" | "groq" | "deepInfra";
 }
 
 let globalPoolIndex = 0;
@@ -969,7 +969,7 @@ let globalPoolIndex = 0;
 // ---- ADVANCED KEY COOLDOWN MANAGER ----
 export interface KeyState {
   key: string;
-  provider: "openRouter" | "gemini" | "groq" | "deepInfra" | "cerebras";
+  provider: "openRouter" | "gemini" | "groq" | "deepInfra";
   status: "ACTIVE" | "COOLING" | "DEPLETED";
   cooldownUntil: number;
 }
@@ -1314,10 +1314,10 @@ export function getInterleavedPool(): InterleavedKey[] {
     if (grf5) groqKeysRaw.push(grf5);
   } catch (e) {}
 
-  // 5. Parse Cerebras Keys (Include BYOK)
+
   try {
     if (typeof localStorage !== "undefined") {
-      const byokKey = cleanKey(localStorage.getItem("henosis_cerebras_key"));
+      const byokKey = cleanKey(localStorage.getItem("henosis_gemini_key"));
       // The user is actually entering a Google Gemini key into the BYOK input, so push to geminiKeysRaw!
       if (byokKey) geminiKeysRaw.push(byokKey);
     }
@@ -1344,7 +1344,7 @@ export function getInterleavedPool(): InterleavedKey[] {
     (k) => k && k !== "",
   );
 
-  // Filter Groq keys appropriately (these are actually Cerebras keys now)
+
   const validGroq = Array.from(new Set(groqKeysRaw)).filter(
     (k) => k && k !== "",
   );
@@ -1372,13 +1372,13 @@ export function getInterleavedPool(): InterleavedKey[] {
   }
 
   const lists: {
-    provider: "openRouter" | "gemini" | "groq" | "deepInfra" | "cerebras";
+    provider: "openRouter" | "gemini" | "groq" | "deepInfra";
     keys: string[];
   }[] = [];
 
   // Enforce providers based on configuration
   if (validGroq.length > 0 && isGroqEnabled) {
-    lists.push({ provider: "cerebras", keys: validGroq });
+    lists.push({ provider: "groq", keys: validGroq });
   }
   if (validGemini.length > 0 && isGeminiEnabled) {
     lists.push({ provider: "gemini", keys: validGemini });
@@ -1717,8 +1717,8 @@ async function executeFetchWithBackoffAndEvasion(
     pool = pool.filter(
       (p) =>
         p.provider === "gemini" ||
-        p.provider === "groq" ||
-        p.provider === "cerebras"
+        p.provider === "groq"
+
     );
 
     const maxAttempts = Math.min(Math.max(5, pool.length), 15);
@@ -1729,8 +1729,8 @@ async function executeFetchWithBackoffAndEvasion(
       pool = pool.filter(
         (p) =>
           p.provider === "gemini" ||
-          p.provider === "groq" ||
-          p.provider === "cerebras"
+          p.provider === "groq"
+
       );
       if (pool.length === 0) {
         console.warn(
@@ -1797,7 +1797,7 @@ async function executeFetchWithBackoffAndEvasion(
 
       try {
         let content = "";
-        if (item.provider === "cerebras" || item.provider === "groq") {
+        if (item.provider === "groq") {
           content = await fetchCerebrasDirect(
             item.key,
             messages,
@@ -2222,7 +2222,7 @@ export async function safeRequest(
     const headers = { ...(mergedOptions.headers || {}) } as Record<string, string>;
     
     if (typeof localStorage !== "undefined") {
-      const byokKey = localStorage.getItem("henosis_cerebras_key");
+      const byokKey = localStorage.getItem("henosis_gemini_key");
       const groqKey = localStorage.getItem("henosis_groq_key");
       const urlStr = url.toString();
       const isAiEndpoint = urlStr.includes('/api/agent') || urlStr.includes('/api/automation') || urlStr.includes('/api/formatting') || urlStr.includes('/api/extract') || urlStr.includes('/api/exam') || urlStr.includes('/api/convert-document') || urlStr.includes('/api/vibe/translate-definition') || urlStr.includes('/api/ai/fix-json-structure');
@@ -2232,8 +2232,8 @@ export async function safeRequest(
           }
           throw new Error("LỖI BẢO MẬT: Chưa cấu hình Google API Key hoặc Groq API Key. Vui lòng lấy Key miễn phí để tiếp tục.");
       }
-      if (byokKey && !headers["x-cerebras-key"]) {
-        headers["x-cerebras-key"] = byokKey;
+      if (byokKey && !headers["x-byok-key"]) {
+        headers["x-byok-key"] = byokKey;
       }
       if (groqKey && !headers["x-groq-key"]) {
         headers["x-groq-key"] = groqKey;

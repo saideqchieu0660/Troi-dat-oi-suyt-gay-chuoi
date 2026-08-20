@@ -1924,7 +1924,7 @@ ${textChunk}`,
     } catch (e: any) {
       console.error(e);
       if (e.message === "NO_KEYS_AVAILABLE") {
-        setError("Vui lòng vào Cài Đặt (Icon Bánh Răng) để nhập API Key Cerebras (BYOK) trước khi sử dụng!");
+        setError("Vui lòng vào Cài Đặt (Icon Bánh Răng) để nhập API Key Gemini (BYOK) trước khi sử dụng!");
       } else {
         setError(e.message || "Xảy ra sự cố không lường trước.");
       }

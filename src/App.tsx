@@ -131,47 +131,24 @@ function Layout({ children }: { children: React.ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
   const [adminKeyInput, setAdminKeyInput] = useState("");
-  const [cerebrasKeyInput, setCerebrasKeyInput] = useState(localStorage.getItem("henosis_cerebras_key") || "");
-  const hasCerebrasKey = !!localStorage.getItem("henosis_cerebras_key");
+  const [geminiKeyInput, setGeminiKeyInput] = useState(localStorage.getItem("henosis_gemini_key") || "");
+  const hasGeminiKey = !!localStorage.getItem("henosis_gemini_key");
 
   const [groqKeyInput, setGroqKeyInput] = useState(localStorage.getItem("henosis_groq_key") || "");
   const hasGroqKey = !!localStorage.getItem("henosis_groq_key");
 
-  const handleSaveCerebrasKey = async () => {
-    if (cerebrasKeyInput.trim()) {
-      const keyStr = cerebrasKeyInput.trim();
-      localStorage.setItem("henosis_cerebras_key", keyStr);
+  const handleSaveGeminiKey = async () => {
+    if (geminiKeyInput.trim()) {
+      const keyStr = geminiKeyInput.trim();
+      localStorage.setItem("henosis_gemini_key", keyStr);
       toast("Đã lưu Google API Key trên máy thành công!");
-      setCerebrasKeyInput(keyStr);
-      
-      const currentUserObj = store.getCurrentUser();
-      if (currentUserObj) {
-        try {
-          const auth = (await import("./lib/firebase")).auth;
-          const token = await auth.currentUser?.getIdToken();
-          if (token) {
-            const res = await fetch("/api/user/keys/cerebras/save", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
-              },
-              body: JSON.stringify({ key: keyStr })
-            });
-            if (res.ok) {
-              toast.success("Đã đồng bộ Key lên Đám Mây an toàn ☁️");
-            }
-          }
-        } catch (e) {
-          console.warn("Failed to sync BYOK key to cloud", e);
-        }
-      }
+      setGeminiKeyInput(keyStr);
     }
   };
 
-  const handleDeleteCerebrasKey = () => {
-    localStorage.removeItem("henosis_cerebras_key");
-    setCerebrasKeyInput("");
+  const handleDeleteGeminiKey = () => {
+    localStorage.removeItem("henosis_gemini_key");
+    setGeminiKeyInput("");
     toast("Đã xóa Google API Key!");
   };
 
@@ -189,36 +166,6 @@ function Layout({ children }: { children: React.ReactNode }) {
     setGroqKeyInput("");
     toast("Đã xóa Groq API Key!");
   };
-
-  // Auto-fetch BYOK key from cloud if not present locally
-  useEffect(() => {
-    if (!user) return;
-    const fetchCloudKey = async () => {
-      try {
-        const localKey = localStorage.getItem("henosis_cerebras_key");
-        if (localKey) return; // Prioritize local if it exists
-
-        const auth = (await import("./lib/firebase")).auth;
-        const token = await auth.currentUser?.getIdToken();
-        if (!token) return;
-
-        const res = await fetch("/api/user/keys/cerebras", {
-          headers: {
-            "Authorization": `Bearer ${token}`
-          }
-        });
-        const data = await res.json();
-        if (data.success && data.hasKey && data.key) {
-          localStorage.setItem("henosis_cerebras_key", data.key);
-          setCerebrasKeyInput(data.key);
-          toast.success("Đã khôi phục API Key từ Đám Mây ☁️");
-        }
-      } catch (e) {
-        console.warn("Failed to fetch cloud BYOK key", e);
-      }
-    };
-    fetchCloudKey();
-  }, [user]);
   const [isVerifyingAdmin, setIsVerifyingAdmin] = useState(false);
   const [adminVerifyResult, setAdminVerifyResult] = useState<{
     success?: boolean;
@@ -1699,20 +1646,20 @@ function Layout({ children }: { children: React.ReactNode }) {
                           <input
                             type="password"
                             placeholder="Google API Key (Bắt đầu bằng AIzaSy...)"
-                            value={cerebrasKeyInput}
-                            onChange={(e) => setCerebrasKeyInput(e.target.value)}
+                            value={geminiKeyInput}
+                            onChange={(e) => setGeminiKeyInput(e.target.value)}
                             className="w-full pl-9 pr-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors placeholder:text-zinc-400"
                           />
                         </div>
                         <button
-                          onClick={handleSaveCerebrasKey}
+                          onClick={handleSaveGeminiKey}
                           className="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-zinc-50 text-xs font-bold rounded-lg transition-colors shrink-0 cursor-pointer"
                         >
                           Lưu
                         </button>
-                        {hasCerebrasKey && (
+                        {hasGeminiKey && (
                           <button
-                            onClick={handleDeleteCerebrasKey}
+                            onClick={handleDeleteGeminiKey}
                             className="px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold rounded-lg transition-colors shrink-0 cursor-pointer"
                           >
                             Xóa

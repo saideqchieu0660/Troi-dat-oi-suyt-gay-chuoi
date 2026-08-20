@@ -120,7 +120,7 @@ export function NextGenMonitorGrid() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleToggleChange = async (provider: 'cerebras' | 'gemini', newValue: boolean) => {
+  const handleToggleChange = async (provider: 'gemini', newValue: boolean) => {
     setIsUpdatingToggles(true);
 
     try {
@@ -131,7 +131,7 @@ export function NextGenMonitorGrid() {
           toast.error(`${provider} Cluster Unreachable - Verification Failed`, { id: 'handshake' });
           if (provider === 'cerebras') setCerebrasEnabled(false);
           if (provider === 'gemini') setGeminiEnabled(false);
-          nextGenRotationEngine.setToggles(provider === 'cerebras' ? false : cerebrasEnabled, provider === 'gemini' ? false : geminiEnabled);
+          nextGenRotationEngine.setToggles(provider === 'gemini' ? false : geminiEnabled);
           setIsUpdatingToggles(false);
           return;
         }
@@ -201,12 +201,6 @@ export function NextGenMonitorGrid() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             
-            {/* Cerebras */}
-            <div className="flex items-center justify-between p-4 border rounded-xl border-zinc-200 bg-zinc-50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
-                  <Zap className="w-5 h-5" />
-                </div>
                 <div>
                   <div className="font-bold">Cerebras Llama3.1</div>
                   <div className="text-xs text-zinc-500 font-mono mt-0.5">High Speed Pipeline</div>

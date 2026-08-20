@@ -195,7 +195,7 @@ const geminiKeyStates: KeyState[] = GEMINI_KEYS.map((key, i) => ({
 
 let currentKeyIndex = Math.floor(Math.random() * Math.max(1, geminiKeyStates.length));
 
-// Dynamic Groq/Cerebras API Key Coordinator and Status Tracker
+// Dynamic Groq/ API Key Coordinator and Status Tracker
 const GROQ_KEYS = Object.keys(process.env)
   .filter(key => key.startsWith('GROQ_API_KEY_') || key.startsWith('VITE_CEREBRAS_KEY_'))
   .sort((a, b) => {
@@ -1083,29 +1083,6 @@ const providerThrottleStates: Record<string, number> = {
   groq: 0,
   openrouter: 0
 };
-
-let cachedCerebrasModel = "gpt-oss-120b";
-let hasVerifiedCerebrasModel = false;
-
-async function getCerebrasModel(): Promise<string> {
-  if (hasVerifiedCerebrasModel) return cachedCerebrasModel;
-  try {
-    const res = await fetch("https://api.cerebras.ai/public/v1/models");
-    if (res.ok) {
-      const data = await res.json();
-      const availableModels = data.data.map((m: any) => m.id);
-      if (!availableModels.includes(cachedCerebrasModel)) {
-        const fallback = availableModels.find((m: string) => !m.includes("embed")) || availableModels[0];
-        if (fallback) cachedCerebrasModel = fallback;
-      }
-    }
-  } catch (e) {
-    console.warn("Failed to discover Cerebras models:", e);
-  }
-  hasVerifiedCerebrasModel = true;
-  return cachedCerebrasModel;
-}
-
 const COOLDOWN_MS = 60 * 1000;
 const providerCooldowns: Record<string, number> = { gemini: 0, groq: 0 };
 let globalRoundRobinCounter = 0;
@@ -1196,7 +1173,7 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
              state = clientInfo.state;
           }
           const response = await ai.models.generateContent({
-            model: config.model || "gemini-2.5-flash-lite",
+            model: config.model || "gemini-2.0-flash",
             contents: promptText,
             config: {
               ...(config.systemInstruction ? { systemInstruction: config.systemInstruction } : {}),
@@ -1226,7 +1203,7 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
           }
           messages.push({ role: "user", content: promptText });
           
-          const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          let groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
              method: "POST",
              headers: {
                 "Authorization": `Bearer ${groqKeyToUse}`,
@@ -1242,8 +1219,26 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
           });
 
           if (!groqRes.ok) {
-             const errText = await groqRes.text();
-             throw new Error(`Groq API Error: ${groqRes.status} - ${errText}`);
+             console.warn(`[groq] 70B failed (${groqRes.status}), falling back to 8B instant...`);
+             groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                   "Authorization": `Bearer ${groqKeyToUse}`,
+                   "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                   model: "llama-3.1-8b-instant",
+                   messages: messages,
+                   temperature: config.temperature !== undefined ? config.temperature : 0.7,
+                   max_completion_tokens: config.maxOutputTokens !== undefined ? config.maxOutputTokens : undefined,
+                   response_format: isJsonMode ? { type: "json_object" } : undefined
+                })
+             });
+             
+             if (!groqRes.ok) {
+                const errText = await groqRes.text();
+                throw new Error(`Groq API Error: ${groqRes.status} - ${errText}`);
+             }
           }
 
           const groqData = await groqRes.json();
@@ -1607,7 +1602,7 @@ QUY TẮC NGHIÊM NGẶT CẦN TUÂN THỦ:
 Nội dung thẻ gốc cần định dạng:
 ${text}`;
 
-      let responseText = await executeGenerateContentRoundRobin(prompt, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] });
+      let responseText = await executeGenerateContentRoundRobin(prompt, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] });
       
       // Clean up potential markdown blocks if AI accidentally added them
       if (responseText.startsWith("\`\`\`") && responseText.endsWith("\`\`\`")) {
@@ -1650,7 +1645,7 @@ QUY TẮC NGHIÊM NGẶT CẦN TUÂN THỦ:
 Mảng văn bản gốc cần định dạng (JSON format):
 ${JSON.stringify(texts)}`;
 
-      let responseText = await executeGenerateContentRoundRobin(prompt, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] });
+      let responseText = await executeGenerateContentRoundRobin(prompt, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] });
       
       // Clean up potential markdown blocks if AI accidentally added them
       if (responseText.startsWith("```") && responseText.endsWith("```")) {
@@ -1716,7 +1711,7 @@ Bọc công thức Toán/Lý/Hóa bằng LaTeX (dấu $ hoặc $$). Chỉ trả 
 
       let responseText = "";
       try {
-        responseText = await executeGenerateContentRoundRobin(prompt, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] });
+        responseText = await executeGenerateContentRoundRobin(prompt, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] });
       } catch (geminiError: any) {
         throw geminiError;
       }
@@ -1762,7 +1757,7 @@ BẮT BUỘC ĐỊNH DẠNG: Chỉ trả về ĐÚNG MỘT MẢNG JSON duy nhấ
       const responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, {
          responseMimeType: "application/json",
          temperature: 0.3
-      }, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+      }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
 
       res.json({ result: responseText });
     } catch (error) {
@@ -1795,7 +1790,7 @@ BẮT BUỘC ĐỊNH DẠNG: Chỉ trả về ĐÚNG MỘT MẢNG JSON duy nhấ
          try {
             const extractRes = await executeGeminiWithRetry(async (ai) => {
                 return await ai.models.generateContent({
-                    model: "gemini-2.5-flash-lite",
+                    model: "gemini-2.0-flash",
                     contents: [
                        { text: "Extract ALL text from this document comprehensively and literally. Do not summarize or explain." },
                        { inlineData: { data: base64Data, mimeType: mimeType || "application/pdf" } }
@@ -1860,7 +1855,7 @@ ${chunkWords.join("\n")}`;
          
          while (retryAttempts < 3 && !parseSuccess) {
             try {
-               const chunkResText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, { temperature: 0.1 }, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+               const chunkResText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, { temperature: 0.1 }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
                
                const chunkJsonText = chunkResText.replace(/```(?:json)?/g, "").trim();
                let chunkArr;
@@ -1993,7 +1988,7 @@ ${chunkWords.join("\n")}`;
          try {
             const extractRes = await executeGeminiWithRetry(async (ai) => {
                 return await ai.models.generateContent({
-                    model: "gemini-2.5-flash-lite",
+                    model: "gemini-2.0-flash",
                     contents: [
                        { text: "Extract ALL text from this document comprehensively and literally. Do not summarize or explain." },
                        { inlineData: { data: finalBase64Data, mimeType: mimeType || "application/pdf" } }
@@ -2034,7 +2029,7 @@ ${chunkWords.join("\n")}`;
       }
 
       const isBackup = provider === "backup";
-      const modelToUse = isBackup ? "gemini-2.5-flash-lite" : "gemini-2.5-flash-lite";
+      const modelToUse = isBackup ? "gemini-2.0-flash" : "gemini-2.0-flash";
       console.log(`[Chunking Log Backend] Bắt đầu xử lý chunk. Provider: ${provider || "primary"} | Model: ${modelToUse} | Số từ/dòng: ${chunkWords.length}`);
 
       const prompt = `[STRICT DETERMINISTIC MODE] Bạn là một cỗ máy biên dịch dữ liệu (Data Compiler).
@@ -2060,7 +2055,7 @@ ${chunkWords.join("\n")}`;
 
       while (retryAttempts < 3) {
          try {
-            const chunkResText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, { temperature: 0.1 }, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+            const chunkResText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, { temperature: 0.1 }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
             
             const chunkJsonText = chunkResText.replace(/```(?:json)?/g, "").trim();
             try {
@@ -2128,7 +2123,7 @@ KHÔNG sử dụng Markdown code block. TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY 
         responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, {
            responseMimeType: "application/json",
            temperature: 0.3
-        }, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+        }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
       } catch (geminiError: any) {
         throw geminiError;
       }
@@ -2162,7 +2157,7 @@ ${text}`;
       try {
         responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, {
            temperature: 0.3
-        }, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+        }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
       } catch (geminiError: any) {
         throw geminiError;
       }
@@ -2212,7 +2207,7 @@ BẮT BUỘC TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY NHẤT (không bọc markdo
       const responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, {
         responseMimeType: "application/json",
         temperature: 0.1
-      }, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+      }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
 
       let parsed = { formattedFront: front, formattedBack: back, formattedExample: example_sentence };
       try {
@@ -2251,7 +2246,7 @@ BẮT BUỘC TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY NHẤT (không bọc markdo
           const responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, {
             responseMimeType: "application/json",
             temperature: 0.2
-          }, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+          }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
           return res.json({ result: responseText });
         } catch (err: any) {
           console.error("Prompt Builder Error:", err);
@@ -2393,7 +2388,7 @@ ${conciseModeGuidance}`;
             try {
               responseText = await executeGenerateContentRoundRobin(mcqPrompt, Object.assign({}, {
                  responseMimeType: "application/json"
-              }, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+              }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
             } catch (geminiError: any) {
               throw geminiError;
             }
@@ -2462,14 +2457,14 @@ ${reminderSuffix}`;
       try {
         let maxTokens = 8192;
         // removed maxTokens override due to early truncation bug
-        const aiModelToUse = req.body.useProModel ? "gemini-2.5-pro" : "gemini-2.5-flash-lite";
+        const aiModelToUse = req.body.useProModel ? "gemini-2.5-pro" : "gemini-2.0-flash";
 
         responseText = await executeGenerateContentRoundRobin(contents, Object.assign({}, {
             systemInstruction: systemPrompt,
             temperature: responseMode === "direct" && responseStyle !== "detailed" ? 0.3 : 0.8,
             maxOutputTokens: maxTokens,
             model: aiModelToUse
-        }, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+        }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
       } catch (geminiError: any) {
          throw geminiError;
       }
@@ -2699,7 +2694,7 @@ ${reminderSuffix}`;
       }
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
+        model: "gemini-2.0-flash",
         contents: prompt,
       });
       return response.text;
@@ -3517,7 +3512,7 @@ ${textChunk}`;
         const responseTextObj = await executeGenerateContentRoundRobin(activePrompt, Object.assign({}, {
           responseMimeType: isJsonMode ? "application/json" : "text/plain",
           temperature: 0.1
-        }, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+        }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
 
         responseText = "";
         if (typeof responseTextObj === "string") {
@@ -3722,7 +3717,7 @@ ${textChunk}`;
         const activePrompt = isDegraded ? degradedPrompt : normalPrompt;
 
         const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash-lite",
+          model: "gemini-2.0-flash",
           contents: activePrompt,
           config: {
             responseMimeType: "application/json",
@@ -3797,7 +3792,7 @@ Do not include any markdown wrapper or extra text.`;
       const responseText = await executeGenerateContentRoundRobin(requestPrompt, Object.assign({}, {
          responseMimeType: "application/json",
          temperature: 0.1
-      }, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+      }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
 
       let cleanText = (responseText as string).trim();
       if (cleanText.startsWith("```json")) {
@@ -3845,7 +3840,7 @@ Trả về dữ liệu dưới dạng JSON chuẩn (không dùng markdown block)
   "wordForm": "Loại từ, phát âm IPA (chỉ áp dụng nếu là tiếng Anh)"
 }`;
 
-      const responseText = await executeGenerateContentRoundRobin(requestPrompt, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] });
+      const responseText = await executeGenerateContentRoundRobin(requestPrompt, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] });
 
       let parsedData: any = { definition: (responseText as string).trim(), wordForm: wordForm || "" };
       try {
@@ -3901,7 +3896,7 @@ ${jsonText}`;
       const responseText = await executeGenerateContentRoundRobin(requestPrompt, Object.assign({}, {
          responseMimeType: "application/json",
          temperature: 0.1
-      }, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+      }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
 
       let cleanText = (responseText as string).trim();
       if (cleanText.startsWith("```json")) {
@@ -3972,7 +3967,7 @@ ${jsonText}`;
       const responseText = await executeGenerateContentRoundRobin(requestPrompt, Object.assign({}, { 
         responseMimeType: "application/json", 
         temperature: 0.1 
-      }, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+      }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
 
       let cleanText = (responseText as string).trim();
       if (cleanText.startsWith("\`\`\`json")) {
@@ -4027,102 +4022,14 @@ ${jsonText}`;
     }
   });
 
-  // --- BYOK ENCRYPTION ENDPOINTS ---
-  app.post("/api/user/keys/cerebras/save", express.json(), async (req, res) => {
-    try {
-      const authHeader = req.headers["authorization"];
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      const idToken = authHeader.substring(7);
-      const decoded = decodeFirebaseToken(idToken);
-      if (!decoded || !decoded.user_id) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      const userId = decoded.user_id;
-      const { key } = req.body;
-      if (!key) return res.status(400).json({ error: "Missing key" });
-
-      const crypto = require('crypto');
-      const ENCRYPTION_KEY = crypto.createHash('sha256').update(process.env.VITE_ADMIN_KEY || "henosis_default_secret_key").digest();
-      const iv = crypto.randomBytes(16);
-      const cipher = crypto.createCipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
-      let encrypted = cipher.update(key, 'utf8', 'hex');
-      encrypted += cipher.final('hex');
-      const finalPayload = iv.toString('hex') + ':' + encrypted;
-
-      if (admin.apps.length > 0) {
-        const db = admin.firestore();
-        await db.collection("users").doc(userId).collection("private").doc("secrets").set({
-          cerebrasKey: finalPayload,
-          updatedAt: new Date().toISOString()
-        }, { merge: true });
-        return res.json({ success: true, message: "API Key encrypted and saved securely." });
-      } else {
-        return res.status(500).json({ error: "Firestore not initialized" });
-      }
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/user/keys/cerebras", async (req, res) => {
-    try {
-      const authHeader = req.headers["authorization"];
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      const idToken = authHeader.substring(7);
-      const decoded = decodeFirebaseToken(idToken);
-      if (!decoded || !decoded.user_id) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      const userId = decoded.user_id;
-
-      if (admin.apps.length > 0) {
-        const db = admin.firestore();
-        const doc = await db.collection("users").doc(userId).collection("private").doc("secrets").get();
-        if (!doc.exists || !doc.data()?.cerebrasKey) {
-          return res.json({ success: true, hasKey: false });
-        }
-
-        const payload = doc.data()!.cerebrasKey;
-        const textParts = payload.split(':');
-        if (textParts.length !== 2) {
-           return res.json({ success: true, hasKey: false });
-        }
-        
-        try {
-          const iv = Buffer.from(textParts[0], 'hex');
-          const encryptedText = Buffer.from(textParts[1], 'hex');
-          const crypto = require('crypto');
-          const ENCRYPTION_KEY = crypto.createHash('sha256').update(process.env.VITE_ADMIN_KEY || "henosis_default_secret_key").digest();
-          const decipher = crypto.createDecipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
-          let decrypted = decipher.update(encryptedText);
-          decrypted = Buffer.concat([decrypted, decipher.final()]);
-
-          return res.json({ success: true, hasKey: true, key: decrypted.toString() });
-        } catch (decErr) {
-          console.error("Failed to decrypt BYOK key:", decErr);
-          return res.json({ success: true, hasKey: false });
-        }
-      }
-      return res.json({ success: true, hasKey: false });
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message });
-    }
-  });
-
-  // --- API USAGE LOGGING (Cerebras & Gemini) ---
+  // --- API USAGE LOGGING (Gemini) ---
   app.post("/api/usage/log", express.json(), async (req, res) => {
     try {
       if (admin.apps.length === 0) return res.json({ success: true, message: "Skipped (No admin)" });
       const { provider, model, latency, status } = req.body;
       if (!provider) return res.status(400).json({ error: "Missing provider" });
       const db = admin.firestore();
-      
-      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-      
+      const today = new Date().toISOString().split("T")[0];
       await db.collection("vibe_api_usage_logs").add({
         provider,
         model: model || "unknown",
@@ -4131,43 +4038,9 @@ ${jsonText}`;
         date: today,
         timestamp: admin.firestore.FieldValue.serverTimestamp()
       });
-      
       res.json({ success: true });
     } catch (err: any) {
       console.error("Failed to log API usage:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/usage/cerebras", async (req, res) => {
-    try {
-      if (admin.apps.length === 0) {
-        return res.json({ success: true, data: [] });
-      }
-      const db = admin.firestore();
-      const snapshot = await db.collection("vibe_api_usage_logs")
-        .where("provider", "==", "cerebras")
-        
-        .limit(1000)
-        .get();
-        
-      const grouped: Record<string, number> = {};
-      
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        const date = data.date || new Date(data.timestamp?.toMillis() || Date.now()).toISOString().split("T")[0];
-        if (!grouped[date]) grouped[date] = 0;
-        grouped[date]++;
-      });
-      
-      const result = Object.keys(grouped).map(date => ({
-        date,
-        calls: grouped[date]
-      }));
-      
-      res.json({ success: true, data: result });
-    } catch (err: any) {
-      console.error("Failed to fetch cerebras usage:", err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -4245,8 +4118,8 @@ Hãy trả về TRỰC TIẾP đoạn prompt đó, không giải thích, không 
       const responseText = await executeGenerateContentRoundRobin(contents, Object.assign({}, {
         systemInstruction,
         temperature: 0.7,
-        model: "gemini-2.5-flash-lite"
-      }, { byokKey: req?.headers["x-cerebras-key"] || req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+        model: "gemini-2.0-flash"
+      }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
 
       res.json({ success: true, prompt: responseText.trim() });
     } catch (err: any) {

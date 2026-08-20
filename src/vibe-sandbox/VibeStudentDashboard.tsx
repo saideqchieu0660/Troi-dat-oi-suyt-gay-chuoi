@@ -1,4 +1,3 @@
-import CerebrasUsageChart from './CerebrasUsageChart';
 import { VibeSyncEngine } from "./sync/VibeSyncEngine";
 import { useLiveVibeDecks } from "./sync/useLiveVibeDecks";
 import { CardStateManager } from "../lib/CardStateManager";
@@ -2440,7 +2439,6 @@ export default function VibeStudentDashboard() {
           </div>
 
           <Suspense fallback={null}>
-            <CerebrasUsageChart />
             <VibePomodoroStats currentDeckTitle="Tất cả" />
             <VibeFocusDeckCard decks={decks} />
             <VibeDailyMotivation />

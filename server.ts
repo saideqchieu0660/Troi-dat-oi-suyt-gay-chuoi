@@ -1227,7 +1227,7 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
                    "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                   model: "llama-3.1-8b-instant",
+                   model: "llama3-8b-8192",
                    messages: messages,
                    temperature: config.temperature !== undefined ? config.temperature : 0.7,
                    max_tokens: config.maxOutputTokens !== undefined ? config.maxOutputTokens : undefined,

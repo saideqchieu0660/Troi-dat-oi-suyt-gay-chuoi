@@ -1210,7 +1210,7 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
                 "Content-Type": "application/json"
              },
              body: JSON.stringify({
-                model: "llama3-70b-8192",
+                model: "llama-3.3-70b-versatile",
                 messages: messages,
                 temperature: config.temperature !== undefined ? config.temperature : 0.7,
                 max_tokens: config.maxOutputTokens !== undefined ? config.maxOutputTokens : undefined,
@@ -1227,7 +1227,7 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
                    "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                   model: "llama3-8b-8192",
+                   model: "mixtral-8x7b-32768",
                    messages: messages,
                    temperature: config.temperature !== undefined ? config.temperature : 0.7,
                    max_tokens: config.maxOutputTokens !== undefined ? config.maxOutputTokens : undefined,

@@ -751,7 +751,8 @@ export const store = {
             const setsCol = collection(db, "sets");
             
             // OPTIMIZATION: Only fetch user's own decks to avoid Full Table Scan
-            const q = query(setsCol, where("createdBy", "==", u.id), limit(500));
+            // Lazy boot: limit to 20 to prevent read explosion on reload
+            const q = query(setsCol, where("createdBy", "==", u.id), limit(20));
             console.log("[FIRESTORE READ] store.ts: getDocs on sets (user created)");
             let setsSnapshot = await withTimeout(getDocs(q), 6000, { empty: true, forEach: () => {} } as any);
             

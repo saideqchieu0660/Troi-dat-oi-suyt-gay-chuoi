@@ -918,7 +918,7 @@ export default function VibeStudentDashboard() {
         const q = query(
           collection(db, "users"),
           where("points", ">", 0),
-          limit(100),
+          limit(10), // Reduced from 100 to 10 for Lazy Boot mode
         );
         
         const snapshot = await getDocs(q);

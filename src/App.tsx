@@ -1147,8 +1147,8 @@ function Layout({ children }: { children: React.ReactNode }) {
         const usersCol = collection(db, "users");
         
         // SỬA LỖI FULL TABLE SCAN GÂY CẠN QUOTA READS
-        // Thay vì tải toàn bộ collection users, chỉ tải top 100 người dùng có điểm > 0
-        const q = query(usersCol, where("points", ">", 0), limit(100));
+        // Lazy Boot: limit to 10 to save reads during Vibe Coding
+        const q = query(usersCol, where("points", ">", 0), limit(10));
         const snapshot = await getDocs(q);
         const usersList: any[] = [];
         snapshot.forEach((doc) => {

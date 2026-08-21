@@ -24,8 +24,8 @@ export class VibeProgressSyncManager {
     this.currentSyncUid = userId;
 
     const colRef = collection(db, `users/${userId}/studyProgress`);
-    // Only listen to the 50 most recently updated decks
-    const q = query(colRef, orderBy("updatedAt", "desc"), limit(50));
+    // Only listen to the 5 most recently updated decks to save reads during Vibe Coding
+    const q = query(colRef, orderBy("updatedAt", "desc"), limit(5));
     console.log("[FIRESTORE READ] VibeProgressSyncManager.ts: onSnapshot on studyProgress");
     const unsub = onSnapshot(q, (snapshot) => {
       let hasChanges = false;

@@ -1213,7 +1213,7 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
                 model: "llama3-70b-8192",
                 messages: messages,
                 temperature: config.temperature !== undefined ? config.temperature : 0.7,
-                max_completion_tokens: config.maxOutputTokens !== undefined ? config.maxOutputTokens : undefined,
+                max_tokens: config.maxOutputTokens !== undefined ? config.maxOutputTokens : undefined,
                 response_format: isJsonMode ? { type: "json_object" } : undefined
              })
           });
@@ -1230,7 +1230,7 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
                    model: "llama-3.1-8b-instant",
                    messages: messages,
                    temperature: config.temperature !== undefined ? config.temperature : 0.7,
-                   max_completion_tokens: config.maxOutputTokens !== undefined ? config.maxOutputTokens : undefined,
+                   max_tokens: config.maxOutputTokens !== undefined ? config.maxOutputTokens : undefined,
                    response_format: isJsonMode ? { type: "json_object" } : undefined
                 })
              });

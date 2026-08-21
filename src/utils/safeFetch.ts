@@ -58,11 +58,13 @@ export async function safeFetch(url: string | Request | URL, options?: RequestIn
   const urlStr = url instanceof Request ? url.url : url.toString();
 
   // Inject BYOK Cerebras key automatically
-  const byokKey = typeof window !== 'undefined' ? localStorage.getItem("henosis_cerebras_key") : null;
+  const geminiKey = typeof window !== 'undefined' ? localStorage.getItem("henosis_gemini_key") : null;
+  const groqKey = typeof window !== 'undefined' ? localStorage.getItem("henosis_groq_key") : null;
+  const cerebrasKey = typeof window !== 'undefined' ? localStorage.getItem("henosis_cerebras_key") : null;
   const finalOptions = { ...options };
 
   const isAiEndpoint = (urlStr.includes('/api/agent') || urlStr.includes('/api/automation') || urlStr.includes('/api/formatting') || urlStr.includes('/api/extract') || urlStr.includes('/api/exam') || urlStr.includes('/api/convert-document')) && !urlStr.includes('/api/automation/reset-weekly-points');
-  if (isAiEndpoint && !byokKey) {
+  if (isAiEndpoint && !geminiKey && !groqKey) {
     if (typeof window !== 'undefined') {
        window.dispatchEvent(new CustomEvent("require-byok-key"));
     }
@@ -83,11 +85,19 @@ export async function safeFetch(url: string | Request | URL, options?: RequestIn
   } catch (e) {}
 
   
-  if (byokKey) {
+  if (geminiKey) {
     const headers = new Headers(finalOptions.headers || {});
-    if (!headers.has("x-cerebras-key")) {
-      headers.set("x-cerebras-key", byokKey);
-    }
+    if (!headers.has("x-byok-key")) headers.set("x-byok-key", geminiKey);
+    finalOptions.headers = headers;
+  }
+  if (groqKey) {
+    const headers = new Headers(finalOptions.headers || {});
+    if (!headers.has("x-groq-key")) headers.set("x-groq-key", groqKey);
+    finalOptions.headers = headers;
+  }
+  if (cerebrasKey) {
+    const headers = new Headers(finalOptions.headers || {});
+    if (!headers.has("x-cerebras-key")) headers.set("x-cerebras-key", cerebrasKey);
     finalOptions.headers = headers;
   }
   

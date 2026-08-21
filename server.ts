@@ -457,7 +457,7 @@ function getGeminiClient(): { ai: any, state: KeyState } {
     throw new Error("Google Gemini API tạm thời bị ngắt bởi quản trị viên để bảo toàn tài nguyên.");
   }
   if (geminiKeyStates.length === 0) {
-    console.warn("⚠️ AUTO-RELOAD GUARD (Runtime): Gemini queue is empty, attempting to recover...");
+    
     const envKeys = [
       process.env.GEMINI_API_KEY, process.env.VITE_GEMINI_API_KEY,
       process.env.GEMINI_API_KEY_1, process.env.GEMINI_API_KEY_2, process.env.GEMINI_API_KEY_3,
@@ -1210,7 +1210,7 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
                 "Content-Type": "application/json"
              },
              body: JSON.stringify({
-                model: "llama-3.3-70b-versatile",
+                model: "llama3-70b-8192",
                 messages: messages,
                 temperature: config.temperature !== undefined ? config.temperature : 0.7,
                 max_completion_tokens: config.maxOutputTokens !== undefined ? config.maxOutputTokens : undefined,
@@ -1602,7 +1602,7 @@ QUY TẮC NGHIÊM NGẶT CẦN TUÂN THỦ:
 Nội dung thẻ gốc cần định dạng:
 ${text}`;
 
-      let responseText = await executeGenerateContentRoundRobin(prompt, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] });
+      let responseText = await executeGenerateContentRoundRobin(prompt, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] });
       
       // Clean up potential markdown blocks if AI accidentally added them
       if (responseText.startsWith("\`\`\`") && responseText.endsWith("\`\`\`")) {
@@ -1645,7 +1645,7 @@ QUY TẮC NGHIÊM NGẶT CẦN TUÂN THỦ:
 Mảng văn bản gốc cần định dạng (JSON format):
 ${JSON.stringify(texts)}`;
 
-      let responseText = await executeGenerateContentRoundRobin(prompt, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] });
+      let responseText = await executeGenerateContentRoundRobin(prompt, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] });
       
       // Clean up potential markdown blocks if AI accidentally added them
       if (responseText.startsWith("```") && responseText.endsWith("```")) {
@@ -1711,7 +1711,7 @@ Bọc công thức Toán/Lý/Hóa bằng LaTeX (dấu $ hoặc $$). Chỉ trả 
 
       let responseText = "";
       try {
-        responseText = await executeGenerateContentRoundRobin(prompt, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] });
+        responseText = await executeGenerateContentRoundRobin(prompt, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] });
       } catch (geminiError: any) {
         throw geminiError;
       }
@@ -1757,7 +1757,7 @@ BẮT BUỘC ĐỊNH DẠNG: Chỉ trả về ĐÚNG MỘT MẢNG JSON duy nhấ
       const responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, {
          responseMimeType: "application/json",
          temperature: 0.3
-      }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+      }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
 
       res.json({ result: responseText });
     } catch (error) {
@@ -1855,7 +1855,7 @@ ${chunkWords.join("\n")}`;
          
          while (retryAttempts < 3 && !parseSuccess) {
             try {
-               const chunkResText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, { temperature: 0.1 }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+               const chunkResText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, { temperature: 0.1 }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
                
                const chunkJsonText = chunkResText.replace(/```(?:json)?/g, "").trim();
                let chunkArr;
@@ -2055,7 +2055,7 @@ ${chunkWords.join("\n")}`;
 
       while (retryAttempts < 3) {
          try {
-            const chunkResText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, { temperature: 0.1 }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+            const chunkResText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, { temperature: 0.1 }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
             
             const chunkJsonText = chunkResText.replace(/```(?:json)?/g, "").trim();
             try {
@@ -2123,7 +2123,7 @@ KHÔNG sử dụng Markdown code block. TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY 
         responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, {
            responseMimeType: "application/json",
            temperature: 0.3
-        }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+        }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
       } catch (geminiError: any) {
         throw geminiError;
       }
@@ -2157,7 +2157,7 @@ ${text}`;
       try {
         responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, {
            temperature: 0.3
-        }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+        }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
       } catch (geminiError: any) {
         throw geminiError;
       }
@@ -2207,7 +2207,7 @@ BẮT BUỘC TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY NHẤT (không bọc markdo
       const responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, {
         responseMimeType: "application/json",
         temperature: 0.1
-      }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+      }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
 
       let parsed = { formattedFront: front, formattedBack: back, formattedExample: example_sentence };
       try {
@@ -2246,7 +2246,7 @@ BẮT BUỘC TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY NHẤT (không bọc markdo
           const responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, {
             responseMimeType: "application/json",
             temperature: 0.2
-          }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+          }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
           return res.json({ result: responseText });
         } catch (err: any) {
           console.error("Prompt Builder Error:", err);
@@ -2388,7 +2388,7 @@ ${conciseModeGuidance}`;
             try {
               responseText = await executeGenerateContentRoundRobin(mcqPrompt, Object.assign({}, {
                  responseMimeType: "application/json"
-              }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+              }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
             } catch (geminiError: any) {
               throw geminiError;
             }
@@ -2464,7 +2464,7 @@ ${reminderSuffix}`;
             temperature: responseMode === "direct" && responseStyle !== "detailed" ? 0.3 : 0.8,
             maxOutputTokens: maxTokens,
             model: aiModelToUse
-        }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+        }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
       } catch (geminiError: any) {
          throw geminiError;
       }
@@ -3512,7 +3512,7 @@ ${textChunk}`;
         const responseTextObj = await executeGenerateContentRoundRobin(activePrompt, Object.assign({}, {
           responseMimeType: isJsonMode ? "application/json" : "text/plain",
           temperature: 0.1
-        }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+        }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
 
         responseText = "";
         if (typeof responseTextObj === "string") {
@@ -3792,7 +3792,7 @@ Do not include any markdown wrapper or extra text.`;
       const responseText = await executeGenerateContentRoundRobin(requestPrompt, Object.assign({}, {
          responseMimeType: "application/json",
          temperature: 0.1
-      }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+      }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
 
       let cleanText = (responseText as string).trim();
       if (cleanText.startsWith("```json")) {
@@ -3840,7 +3840,7 @@ Trả về dữ liệu dưới dạng JSON chuẩn (không dùng markdown block)
   "wordForm": "Loại từ, phát âm IPA (chỉ áp dụng nếu là tiếng Anh)"
 }`;
 
-      const responseText = await executeGenerateContentRoundRobin(requestPrompt, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] });
+      const responseText = await executeGenerateContentRoundRobin(requestPrompt, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] });
 
       let parsedData: any = { definition: (responseText as string).trim(), wordForm: wordForm || "" };
       try {
@@ -3896,7 +3896,7 @@ ${jsonText}`;
       const responseText = await executeGenerateContentRoundRobin(requestPrompt, Object.assign({}, {
          responseMimeType: "application/json",
          temperature: 0.1
-      }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+      }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
 
       let cleanText = (responseText as string).trim();
       if (cleanText.startsWith("```json")) {
@@ -3967,7 +3967,7 @@ ${jsonText}`;
       const responseText = await executeGenerateContentRoundRobin(requestPrompt, Object.assign({}, { 
         responseMimeType: "application/json", 
         temperature: 0.1 
-      }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+      }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
 
       let cleanText = (responseText as string).trim();
       if (cleanText.startsWith("\`\`\`json")) {
@@ -4119,7 +4119,7 @@ Hãy trả về TRỰC TIẾP đoạn prompt đó, không giải thích, không 
         systemInstruction,
         temperature: 0.7,
         model: "gemini-2.0-flash"
-      }, { byokKey: req?.headers["x-byok-key"] || (req?.headers["authorization"] || "").replace("Bearer ",""), groqKey: req?.headers["x-groq-key"] }));
+      }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
 
       res.json({ success: true, prompt: responseText.trim() });
     } catch (err: any) {

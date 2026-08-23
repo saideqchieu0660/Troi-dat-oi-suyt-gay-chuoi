@@ -614,7 +614,7 @@ export default function VibeStudentDashboard() {
     };
   }, []);
 
-  const rawDecks = useLiveVibeDecks();
+  const { data: rawDecks = [] } = useLiveVibeDecks(user?.uid || user?.id);
   const [personalCardStates, setPersonalCardStates] = useState<any[]>([]);
   const [newGroupName, setNewGroupName] = useState("");
   const [createdGroupId, setCreatedGroupId] = useState<string | null>(null);

@@ -1,26 +1,31 @@
 import sys
 
-with open('src/main.tsx', 'r') as f:
+with open("src/main.tsx", "r") as f:
     content = f.read()
 
-imports = """import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-const queryClient = new QueryClient();"""
+content = content.replace(
+    "import { QueryClient, QueryClientProvider } from '@tanstack/react-query';",
+    "import { QueryClient, QueryClientProvider } from '@tanstack/react-query';\nimport { ReactQueryDevtools } from '@tanstack/react-query-devtools';"
+)
 
-provider_start = """    <QueryClientProvider client={queryClient}>
-      <ErrorBoundary>"""
-provider_end = """      </ErrorBoundary>
-    </QueryClientProvider>"""
+content = content.replace(
+    "const queryClient = new QueryClient();",
+    """const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000, // 1 phút
+      gcTime: 5 * 60 * 1000, // 5 phút
+      refetchOnWindowFocus: false,
+      retry: 2,
+    },
+  },
+});"""
+)
 
-if 'QueryClientProvider' not in content:
-    # insert imports
-    content = content.replace("import { BrowserRouter } from 'react-router-dom';", "import { BrowserRouter } from 'react-router-dom';\n" + imports)
-    
-    # replace ErrorBoundary wrapper
-    content = content.replace("<ErrorBoundary>", provider_start)
-    content = content.replace("</ErrorBoundary>", provider_end)
+content = content.replace(
+    "<App />\n        </SoundProvider>\n      </ErrorBoundary>\n    </QueryClientProvider>",
+    "<App />\n        </SoundProvider>\n      </ErrorBoundary>\n      <ReactQueryDevtools initialIsOpen={false} />\n    </QueryClientProvider>"
+)
 
-    with open('src/main.tsx', 'w') as f:
-        f.write(content)
-    print("Patched main.tsx")
-else:
-    print("Already patched")
+with open("src/main.tsx", "w") as f:
+    f.write(content)

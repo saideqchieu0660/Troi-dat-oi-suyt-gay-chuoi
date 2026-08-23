@@ -1,4 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import sys
+
+with open("src/vibe-sandbox/sync/useLiveVibeDecks.ts", "w") as f:
+    f.write("""import { useQuery } from '@tanstack/react-query';
 
 export function useLiveVibeDecks(userId: string | null | undefined, deckId?: string) {
   return useQuery({
@@ -14,3 +17,4 @@ export function useLiveVibeDecks(userId: string | null | undefined, deckId?: str
     staleTime: 2 * 60 * 1000, // 2 minutes
   });
 }
+""")

@@ -1134,45 +1134,22 @@ function Layout({ children }: { children: React.ReactNode }) {
     };
   }, [user?.uid]);
 
+  const { data: leaderboardData } = useLeaderboard(!!user?.uid);
   useEffect(() => {
-    if (!user) {
-      setCurrentUserRank(null);
-      return;
-    }
-    let unsub = () => {};
-    const setupRankingListener = async () => {
-      try {
-        const { db } = await import("./lib/firebase");
-        const { collection, getDocs, query, where, limit } = await import("firebase/firestore");
-        const usersCol = collection(db, "users");
-        
-        // SỬA LỖI FULL TABLE SCAN GÂY CẠN QUOTA READS
-        // Lazy Boot: limit to 10 to save reads during Vibe Coding
-        const q = query(usersCol, where("points", ">", 0), limit(10));
-        const snapshot = await getDocs(q);
-        const usersList: any[] = [];
-        snapshot.forEach((doc) => {
-          usersList.push({ id: doc.id, ...doc.data() });
-        });
-        const sorted = usersList.sort(
-          (a, b) => (b.points || 0) - (a.points || 0),
-        );
-        const index = sorted.findIndex((u: any) => u.id === user.uid);
-        if (index !== -1) {
-          setCurrentUserRank(index + 1);
-        } else {
-          setCurrentUserRank(null);
-        }
-      } catch (e) {
-        console.error(
-          "Error setting up ranking fetch inside App.tsx:",
-          e,
-        );
+    if (leaderboardData && user?.uid) {
+      const sorted = leaderboardData.sort(
+        (a: any, b: any) => (b.points || 0) - (a.points || 0),
+      );
+      const index = sorted.findIndex((u: any) => u.id === user.uid);
+      if (index !== -1) {
+        setCurrentUserRank(index + 1);
+      } else {
+        setCurrentUserRank(null);
       }
-    };
-    setupRankingListener();
-    return () => {};
-  }, [user?.uid]);
+    } else {
+      setCurrentUserRank(null);
+    }
+  }, [leaderboardData, user?.uid]);
 
   const handleLogout = async (redirectToAuth: boolean = true) => {
     try {
@@ -2089,9 +2066,22 @@ function Layout({ children }: { children: React.ReactNode }) {
 import { useBatchConfig } from "./hooks/useConfig";
 import { updateApiProviderConfig, aiPromptsConfig } from "./utils/apiClient";
 import { nextGenPromptManager } from "./services/next_gen/promptManager";
+import { useQueryClient } from '@tanstack/react-query';
+import { useLeaderboard } from './hooks/useLeaderboard';
 import { useEffect } from "react";
 
 function AppConfigLoader() {
+  const queryClient = useQueryClient();
+  
+  useEffect(() => {
+    const handleSyncSuccess = () => {
+      queryClient.invalidateQueries({ queryKey: ['vibe-decks'] });
+      queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+    };
+    window.addEventListener('vibe-sync-push-success', handleSyncSuccess);
+    return () => window.removeEventListener('vibe-sync-push-success', handleSyncSuccess);
+  }, [queryClient]);
+
   const { data } = useBatchConfig();
   
   useEffect(() => {

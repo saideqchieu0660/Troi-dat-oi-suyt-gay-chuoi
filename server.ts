@@ -1,14 +1,15 @@
 console.log("Initializing API Server...");
 import express from "express";
+import NodeCache from "node-cache";
 import path from "path";
 import os from "os";
 // start at line 4, just import dotenv
 import { GoogleGenAI } from "@google/genai";
 import { google } from "googleapis";
-import { executeGroqRequest } from "./src/lib/groq";
-import { appCache } from "./src/lib/firestore-cache";
-import { errorHandler } from "./src/lib/errorHandler";
-import { withRetry } from "./src/lib/withRetry";
+import { executeGroqRequest } from "./src/lib/groq.js";
+import { appCache } from "./src/lib/firestore-cache.js";
+import { errorHandler } from "./src/lib/errorHandler.js";
+import { withRetry } from "./src/lib/withRetry.js";
 
 import dotenv from "dotenv";
 
@@ -1230,6 +1231,8 @@ async function _executeGenerateContentRoundRobinInternal(contents: any, config: 
 }
 
 const app = express();
+const myCache = new NodeCache({ stdTTL: 60 });
+const configCache = new NodeCache({ stdTTL: 600 });
 
 app.post("/api/auth/escalate-role", express.json(), async (req, res, next) => {
     const { uid, providedKey } = req.body;
@@ -1266,7 +1269,25 @@ const PORT = 3000;
 
 app.use(express.json({ limit: "50mb" }));
 
-app.get("/api/config/health", (req, res) => {
+
+  app.get('/api/users/leaderboard', async (req, res, next) => {
+    try {
+      const cacheKey = 'leaderboard';
+      const cached = myCache.get(cacheKey);
+      if (cached) return res.json(cached);
+
+      const q = db.collection('users').where('points', '>', 0).orderBy('points', 'desc').limit(10);
+      const snapshot = await q.get();
+      const data = [];
+      snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+      myCache.set(cacheKey, data, 300); // 5 minutes
+      res.json(data);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.get("/api/config/health", (req, res) => {
   const memUsage = process.memoryUsage();
   const cpus = os.cpus();
   const osTotalMem = os.totalmem();
@@ -2697,6 +2718,33 @@ ${reminderSuffix}`;
   };
 
   initVibeRotator();
+
+  
+  app.get('/api/vibe/decks', async (req, res, next) => {
+    try {
+      const { userId, deckId } = req.query;
+      if (!userId) return res.status(400).json({ error: "Missing userId" });
+      
+      const cacheKey = `vibe_decks_${userId}_${deckId || 'all'}`;
+      const cached = myCache.get(cacheKey);
+      if (cached) return res.json(cached);
+
+      let q = db.collection('vibe_decks').where('ownerId', '==', userId);
+      const snapshot = await q.get();
+      const data = [];
+      snapshot.forEach(doc => {
+         const docData = doc.data();
+         if (!deckId || doc.id === deckId) {
+            data.push({ id: doc.id, ...docData });
+         }
+      });
+      
+      myCache.set(cacheKey, data, 60); // Cache 60s
+      res.json(data);
+    } catch (e) {
+      next(e);
+    }
+  });
 
   app.get("/api/vibe/keys-status", (req, res) => {
     res.json({ keys: vibeKeyStates.map(k => ({ id: k.id, maskedKey: k.maskedKey, status: k.status, recoveryTime: k.recoveryTime, usageCount: k.usageCount })) });

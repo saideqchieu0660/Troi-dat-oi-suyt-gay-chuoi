@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { get, set, del, keys } from "idb-keyval";
 import { db } from "../../lib/firebase";
+import { QueryClient } from '@tanstack/react-query';
 import { collection, doc, getDocs, query, where, writeBatch, getDoc, onSnapshot, increment, limit, serverTimestamp, orderBy } from "firebase/firestore";
 import { Deck, store } from "../../lib/store";
 import { isFeatureEnabled } from "../../features.config";

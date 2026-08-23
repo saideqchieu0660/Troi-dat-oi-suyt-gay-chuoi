@@ -1186,7 +1186,7 @@ async function _executeGenerateContentRoundRobinInternal(contents: any, config: 
              state = clientInfo.state;
           }
           const response = await ai.models.generateContent({
-            model: config.model || "gemini-2.0-flash",
+            model: config.model || "gemini-3.6-flash",
             contents: promptText,
             config: {
               ...(config.systemInstruction ? { systemInstruction: config.systemInstruction } : {}),
@@ -1205,6 +1205,7 @@ async function _executeGenerateContentRoundRobinInternal(contents: any, config: 
           } else {
              console.warn("[gemini] Provider failed, trying fallback...", err?.message);
           }
+          if (state) handleGeminiError(state, err);
           finalError = err;
         }
       } else if (provider === "groq") {
@@ -1219,6 +1220,7 @@ async function _executeGenerateContentRoundRobinInternal(contents: any, config: 
           } else {
              console.warn("[groq] Provider failed, trying fallback...", err?.message);
           }
+          if (state) handleGeminiError(state, err);
           finalError = err;
         }
       }
@@ -1777,7 +1779,7 @@ BẮT BUỘC ĐỊNH DẠNG: Chỉ trả về ĐÚNG MỘT MẢNG JSON duy nhấ
          try {
             const extractRes = await executeGeminiWithRetry(async (ai) => {
                 return await ai.models.generateContent({
-                    model: "gemini-2.0-flash",
+                    model: "gemini-3.6-flash",
                     contents: [
                        { text: "Extract ALL text from this document comprehensively and literally. Do not summarize or explain." },
                        { inlineData: { data: base64Data, mimeType: mimeType || "application/pdf" } }
@@ -1975,7 +1977,7 @@ ${chunkWords.join("\n")}`;
          try {
             const extractRes = await executeGeminiWithRetry(async (ai) => {
                 return await ai.models.generateContent({
-                    model: "gemini-2.0-flash",
+                    model: "gemini-3.6-flash",
                     contents: [
                        { text: "Extract ALL text from this document comprehensively and literally. Do not summarize or explain." },
                        { inlineData: { data: finalBase64Data, mimeType: mimeType || "application/pdf" } }
@@ -2016,7 +2018,7 @@ ${chunkWords.join("\n")}`;
       }
 
       const isBackup = provider === "backup";
-      const modelToUse = isBackup ? "gemini-2.0-flash" : "gemini-2.0-flash";
+      const modelToUse = isBackup ? "gemini-3.6-flash" : "gemini-3.6-flash";
       console.log(`[Chunking Log Backend] Bắt đầu xử lý chunk. Provider: ${provider || "primary"} | Model: ${modelToUse} | Số từ/dòng: ${chunkWords.length}`);
 
       const prompt = `[STRICT DETERMINISTIC MODE] Bạn là một cỗ máy biên dịch dữ liệu (Data Compiler).
@@ -2457,13 +2459,14 @@ ${reminderSuffix}`;
       try {
         let maxTokens = 8192;
         // removed maxTokens override due to early truncation bug
-        const aiModelToUse = req.body.useProModel ? "gemini-2.5-pro" : "gemini-2.0-flash";
+        const aiModelToUse = req.body.useProModel ? "gemini-2.5-pro" : "gemini-3.6-flash";
 
         responseText = await executeGenerateContentRoundRobin(contents, Object.assign({}, {
             systemInstruction: systemPrompt,
             temperature: responseMode === "direct" && responseStyle !== "detailed" ? 0.3 : 0.8,
             maxOutputTokens: maxTokens,
-            model: aiModelToUse
+            model: aiModelToUse,
+            forcedProvider: req.body.forcedProvider
         }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
       } catch (geminiError: any) {
          throw geminiError;
@@ -2694,7 +2697,7 @@ ${reminderSuffix}`;
       }
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-3.6-flash",
         contents: prompt,
       });
       return response.text;
@@ -3754,7 +3757,7 @@ ${textChunk}`;
         const activePrompt = isDegraded ? degradedPrompt : normalPrompt;
 
         const response = await ai.models.generateContent({
-          model: "gemini-2.0-flash",
+          model: "gemini-3.6-flash",
           contents: activePrompt,
           config: {
             responseMimeType: "application/json",
@@ -4169,7 +4172,7 @@ Hãy trả về TRỰC TIẾP đoạn prompt đó, không giải thích, không 
       const responseText = await executeGenerateContentRoundRobin(contents, Object.assign({}, {
         systemInstruction,
         temperature: 0.7,
-        model: "gemini-2.0-flash"
+        model: "gemini-3.6-flash"
       }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
 
       res.json({ success: true, prompt: responseText.trim() });

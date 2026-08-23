@@ -850,6 +850,24 @@ export default function VibeStudentDashboard() {
           }
           return card;
         });
+        
+        let weakCount = 0;
+        let masteredCount = 0;
+        let estimatedSecs = 0;
+        
+        const remindIds = JSON.parse(localStorage.getItem("remind_later_items") || "[]");
+
+        clonedDeck.cards.forEach((c: any) => {
+           if (c.isHard || remindIds.includes(c.id)) weakCount++;
+           const m = c.mastery || 0;
+           if (m >= 80) { masteredCount++; estimatedSecs += 10; }
+           else if (m >= 50) { estimatedSecs += 25; }
+           else if (m >= 20) { estimatedSecs += 40; }
+           else { estimatedSecs += 60; }
+        });
+        clonedDeck.vibe_weak_count = weakCount;
+        clonedDeck.vibe_mastered_count = masteredCount;
+        clonedDeck.vibe_estimated_seconds = estimatedSecs;
       }
       return clonedDeck;
     });

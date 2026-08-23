@@ -90,6 +90,9 @@ export interface Deck {
   creatorRole?: string;
   creatorName?: string;
   createdAt?: number | string;
+  vibe_weak_count?: number;
+  vibe_mastered_count?: number;
+  vibe_estimated_seconds?: number;
 }
 
 export interface StudyGroup {

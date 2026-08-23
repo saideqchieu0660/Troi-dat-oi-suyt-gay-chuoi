@@ -1278,6 +1278,11 @@ app.use(express.json({ limit: "50mb" }));
       const cached = myCache.get(cacheKey);
       if (cached) return res.json(cached);
 
+      if (!admin.apps.length) {
+        return res.status(503).json({ error: "Firebase Admin not initialized" });
+      }
+      const db = admin.firestore();
+
       const q = db.collection('users').where('points', '>', 0).orderBy('points', 'desc').limit(10);
       const snapshot = await q.get();
       const data = [];

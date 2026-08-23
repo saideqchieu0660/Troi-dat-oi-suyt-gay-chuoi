@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Bot, Save, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 import { getAuth } from "firebase/auth";
-import { syncAIPrompts } from '../utils/apiClient';
+
 
 export function AIPromptsEditorWidget() {
   const [prompts, setPrompts] = useState<any>({});
@@ -56,7 +56,7 @@ export function AIPromptsEditorWidget() {
       const data = await res.json();
       if (data.success) {
         setSuccess("Lưu System Prompts thành công! Server đã cập nhật đồng bộ.");
-        syncAIPrompts();
+        queryClient.invalidateQueries({ queryKey: ["app_config_batch"] });
         setTimeout(() => setSuccess(null), 3000);
       } else {
         throw new Error(data.error || "Save failed");

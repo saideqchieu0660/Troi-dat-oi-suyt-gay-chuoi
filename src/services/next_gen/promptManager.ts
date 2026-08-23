@@ -110,29 +110,20 @@ class PromptManager {
   }
 
   public async fetchFromDatabase() {
-    this.isHydrating = true;
-    try {
-      const res = await fetch("/api/config/ai-prompts");
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data) {
-          const validData: any = {};
-          for (const [key, val] of Object.entries(json.data)) {
-            if (typeof val === 'string' && (val.length >= 20 || key === 'safetyDictionary')) {
-              validData[key] = val;
-            }
-          }
-          // Merge fetched data with defaults
-          this.config = { ...this.config, ...validData };
-          localStorage.setItem("nextgen_prompts_v2", JSON.stringify(this.config));
-          this.updateSafetyRegex();
-        }
+    // Disabled direct fetch, config is injected via React Query from AppConfigLoader
+  }
+  
+  public applyConfigFromNetwork(data: any) {
+    if (!data) return;
+    const validData: any = {};
+    for (const [key, val] of Object.entries(data)) {
+      if (typeof val === 'string' && (val.length >= 20 || key === 'safetyDictionary')) {
+        validData[key] = val;
       }
-    } catch (e) {
-      console.error("Failed to fetch dynamic prompts from server, falling back to cache", e);
-    } finally {
-      this.isHydrating = false;
     }
+    this.config = { ...this.config, ...validData };
+    localStorage.setItem("nextgen_prompts_v2", JSON.stringify(this.config));
+    this.updateSafetyRegex();
   }
 
   public async saveToDatabase(newConfig: Partial<SystemPromptMatrix>, adminKey: string = ""): Promise<boolean> {

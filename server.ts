@@ -5,6 +5,11 @@ import os from "os";
 // start at line 4, just import dotenv
 import { GoogleGenAI } from "@google/genai";
 import { google } from "googleapis";
+import { executeGroqRequest } from "./src/lib/groq";
+import { appCache } from "./src/lib/firestore-cache";
+import { errorHandler } from "./src/lib/errorHandler";
+import { withRetry } from "./src/lib/withRetry";
+
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -371,13 +376,13 @@ const updateKeyMetrics = async (index: number, metric: "usage" | "error") => {
   if (projectId) {
      try {
         const docId = `api_key_${index}`;
-        let url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/system_metrics/${docId}?updateMask=${metric}Count`;
+        let url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/system_metrics?pageSize=100/${docId}?updateMask=${metric}Count`;
         
         // This relies on the public write rule we added to firestore.rules
         // Using HTTP REST API to avoid bundling full firebase client in the backend
         
         // Let's first read the current to see if it exists
-        const getRes = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/system_metrics/${docId}`);
+        const getRes = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/system_metrics?pageSize=100/${docId}`);
         const currentData = getRes.ok ? await getRes.json() : null;
         
         let currentCount = 0;
@@ -390,7 +395,7 @@ const updateKeyMetrics = async (index: number, metric: "usage" | "error") => {
         
         if (metric === "usage") {
            fields["lastUsed"] = { timestampValue: new Date().toISOString() };
-           url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/system_metrics/${docId}?updateMask=${metric}Count&updateMask=lastUsed`;
+           url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/system_metrics?pageSize=100/${docId}?updateMask=${metric}Count&updateMask=lastUsed`;
         }
 
         await fetch(url, {
@@ -1087,7 +1092,14 @@ const COOLDOWN_MS = 60 * 1000;
 const providerCooldowns: Record<string, number> = { gemini: 0, groq: 0 };
 let globalRoundRobinCounter = 0;
 
+
 async function executeGenerateContentRoundRobin(contents: any, config: any = {}): Promise<string> {
+  return withRetry(
+    () => _executeGenerateContentRoundRobinInternal(contents, config),
+    { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 15000 }
+  );
+}
+async function _executeGenerateContentRoundRobinInternal(contents: any, config: any = {}): Promise<string> {
   const isJsonMode = config.responseMimeType === "application/json";
   
   let promptText = "";
@@ -1196,53 +1208,7 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
         }
       } else if (provider === "groq") {
         try {
-          const groqKeyToUse = config.groqKey || process.env.GROQ_API_KEY;
-          const messages = [];
-          if (config.systemInstruction) {
-             messages.push({ role: "system", content: config.systemInstruction });
-          }
-          messages.push({ role: "user", content: promptText });
-          
-          let groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-             method: "POST",
-             headers: {
-                "Authorization": `Bearer ${groqKeyToUse}`,
-                "Content-Type": "application/json"
-             },
-             body: JSON.stringify({
-                model: "llama-3.3-70b-versatile",
-                messages: messages,
-                temperature: config.temperature !== undefined ? config.temperature : 0.7,
-                max_tokens: config.maxOutputTokens !== undefined ? config.maxOutputTokens : undefined,
-                response_format: isJsonMode ? { type: "json_object" } : undefined
-             })
-          });
-
-          if (!groqRes.ok) {
-             console.warn(`[groq] 70B failed (${groqRes.status}), falling back to 8B instant...`);
-             groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                   "Authorization": `Bearer ${groqKeyToUse}`,
-                   "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                   model: "mixtral-8x7b-32768",
-                   messages: messages,
-                   temperature: config.temperature !== undefined ? config.temperature : 0.7,
-                   max_tokens: config.maxOutputTokens !== undefined ? config.maxOutputTokens : undefined,
-                   response_format: isJsonMode ? { type: "json_object" } : undefined
-                })
-             });
-             
-             if (!groqRes.ok) {
-                const errText = await groqRes.text();
-                throw new Error(`Groq API Error: ${groqRes.status} - ${errText}`);
-             }
-          }
-
-          const groqData = await groqRes.json();
-          const text = groqData.choices?.[0]?.message?.content || "";
+          const text = await executeGroqRequest(promptText, config);
           if (text) return text;
         } catch (err: any) {
           const errMsg = (err?.message || "").toLowerCase();
@@ -1260,12 +1226,12 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
     }
   }
 
-  throw new Error("All API Providers failed after multiple attempts. Last error: " + (finalError?.message || "Unknown Error"));
+  throw finalError || new Error("All API Providers failed");
 }
 
 const app = express();
 
-app.post("/api/auth/escalate-role", express.json(), async (req, res) => {
+app.post("/api/auth/escalate-role", express.json(), async (req, res, next) => {
     const { uid, providedKey } = req.body;
     if (!uid || !providedKey) return res.status(400).json({ error: "Missing uid or key" });
     
@@ -1318,7 +1284,7 @@ app.get("/api/config/health", (req, res) => {
   });
 });
 
-app.get("/api/models", async (req, res) => {
+app.get("/api/models", async (req, res, next) => {
   try {
     const { ai } = getGeminiClient();
     const models = [];
@@ -1327,7 +1293,7 @@ app.get("/api/models", async (req, res) => {
     }
     res.json({ models });
   } catch (error: any) {
-    res.status(500).json({ error: error.message, stack: error.stack });
+    next(error);
   }
 });
 
@@ -2015,7 +1981,7 @@ ${chunkWords.join("\n")}`;
       res.json({ rawText });
     } catch (error: any) {
       console.error("Extract Text Route Error:", error);
-      res.status(500).json({ error: true, message: error.message || "Lỗi trích xuất văn bản" });
+      next(error);
     }
   });
 
@@ -2090,7 +2056,7 @@ ${chunkWords.join("\n")}`;
       res.json({ flashcards: chunkArr || [] });
     } catch (error: any) {
       console.error("[Chunking Log Backend] Lỗi Convert Document Chunk Error:", error);
-      res.status(500).json({ error: true, message: error.message || "Lỗi xử lý cụm từ vựng" });
+      next(error);
     }
   });
 
@@ -2142,6 +2108,12 @@ KHÔNG sử dụng Markdown code block. TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY 
       if (!text) {
         return res.status(400).json({ error: "No text provided for translation." });
       }
+      
+      const cacheKey = "translate_" + Buffer.from(text).toString("base64").substring(0, 50);
+      const cachedData = appCache.get(cacheKey);
+      if (cachedData) {
+         return res.json({ translatedText: cachedData.translatedText });
+      }
 
       const prompt = `Bạn là một trợ lý dịch thuật tiếng Anh chuyên nghiệp. Nhiệm vụ của bạn là dịch phần giải nghĩa (definition) của các từ vựng sang tiếng Việt.
 
@@ -2159,10 +2131,17 @@ ${text}`;
            temperature: 0.3
         }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
       } catch (geminiError: any) {
+        const staleData = appCache.getStale(cacheKey);
+        if (staleData) {
+           console.warn("Serving stale translate definition due to AI quota/error");
+           return res.json({ translatedText: staleData.translatedText, stale: true });
+        }
         throw geminiError;
       }
       
       const cleanedTranslation = responseText.trim().replace(/^["']|["']$/g, "");
+      
+      appCache.set(cacheKey, { translatedText: cleanedTranslation });
       res.json({ translatedText: cleanedTranslation });
     } catch (error: any) {
       console.error("Translate Definition Error:", error);
@@ -2477,7 +2456,7 @@ ${reminderSuffix}`;
   });
 
   // Public Endpoint for System and API Health Check
-  app.get("/api/health", async (req, res) => {
+  app.get("/api/health", async (req, res, next) => {
     try {
       const dbConnected = admin.apps.length > 0;
       let dbHealth = "UNKNOWN";
@@ -2568,7 +2547,7 @@ ${reminderSuffix}`;
       });
     } catch (err: any) {
       console.error("❌ [Auto Weekly Reset] Gặp lỗi nghiêm trọng khi reset điểm tuần:", err);
-      return res.status(500).json({ error: true, message: err.message || "Lỗi hệ thống khi dọn dẹp điểm tuần." });
+      next(err);
     }
   });
 
@@ -2723,18 +2702,18 @@ ${reminderSuffix}`;
     res.json({ keys: vibeKeyStates.map(k => ({ id: k.id, maskedKey: k.maskedKey, status: k.status, recoveryTime: k.recoveryTime, usageCount: k.usageCount })) });
   });
 
-  app.post("/api/vibe/test-rotator", async (req, res) => {
+  app.post("/api/vibe/test-rotator", async (req, res, next) => {
     try {
       const { type } = req.body;
       const result = await executeVibeRequest("Say hello in one word.", type);
       res.json({ success: true, result });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      next(err);
     }
   });
   // --- END VIBE SANDBOX ---
 
-  app.get("/api/config/keys-status", async (req, res) => {
+  app.get("/api/config/keys-status", async (req, res, next) => {
     const isAllowed = await checkAdminAuth(req);
     if (!isAllowed) {
       return res.status(403).json({ error: "Thao tác không hợp lệ. Sai admin key." });
@@ -2826,7 +2805,7 @@ ${reminderSuffix}`;
       if (admin.apps.length > 0) {
         try {
           const db = admin.firestore();
-          const snapshot = await db.collection("system_metrics").get();
+          const snapshot = await db.collection("system_metrics").limit(100).get();
           const freshMetrics: Record<number, any> = {};
           
           snapshot.forEach(doc => {
@@ -2853,7 +2832,7 @@ ${reminderSuffix}`;
       const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || "henosis-web-b6df3";
       if ((now - lastFirestoreMetricsCacheTime > 15000) && projectId) {
         try {
-          const resFb = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/system_metrics`);
+          const resFb = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/system_metrics?pageSize=100`);
         if (resFb.ok) {
            const data = await resFb.json();
            if (data.documents) {
@@ -2939,7 +2918,17 @@ ${reminderSuffix}`;
 
    // API Toggle States Endpoints
    // API Toggle States Endpoints (Public GET for dynamic client-side synchronization, safe state signals only)
-   app.get("/api/config/api-toggles", async (req, res) => { 
+   // API Config Batch Endpoint
+   app.get("/api/config/batch", async (req, res, next) => {
+     res.setHeader("Cache-Control", "public, max-age=300"); // 5 minutes cache on HTTP layer as well
+     await Promise.all([refreshApiToggles(), refreshAIPrompts()]);
+     return res.json({
+       toggles: { groqEnabled: false, openRouterEnabled: false, geminiEnabled: true, deepInfraEnabled: false }, // matching the behavior of api-toggles
+       prompts: globalAIPrompts || {}
+     });
+   });
+
+   app.get("/api/config/api-toggles", async (req, res, next) => { 
      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
      res.setHeader("Pragma", "no-cache");
      res.setHeader("Expires", "0");
@@ -2971,7 +2960,7 @@ ${reminderSuffix}`;
      }
    }
    
-   app.get("/api/config/system-links", async (req, res) => {
+   app.get("/api/config/system-links", async (req, res, next) => {
      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
      res.setHeader("Pragma", "no-cache");
      res.setHeader("Expires", "0");
@@ -2982,7 +2971,7 @@ ${reminderSuffix}`;
      });
    });
    
-   app.post("/api/config/system-links", express.json(), async (req, res) => {
+   app.post("/api/config/system-links", express.json(), async (req, res, next) => {
      const isAllowed = await checkAdminAuth(req);
      if (!isAllowed) {
        return res.status(403).json({ error: "Thao tác không hợp lệ. Sai admin key." });
@@ -3027,7 +3016,7 @@ ${reminderSuffix}`;
      }
    }
    
-   app.get("/api/config/ai-prompts", async (req, res) => {
+   app.get("/api/config/ai-prompts", async (req, res, next) => {
      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
      res.setHeader("Pragma", "no-cache");
      res.setHeader("Expires", "0");
@@ -3038,7 +3027,7 @@ ${reminderSuffix}`;
      });
    });
 
-   app.post("/api/config/ai-prompts", express.json(), async (req, res) => {
+   app.post("/api/config/ai-prompts", express.json(), async (req, res, next) => {
      const isAllowed = await checkAdminAuth(req);
      if (!isAllowed) {
        return res.status(403).json({ error: "Thao tác không hợp lệ. Sai admin key." });
@@ -3063,7 +3052,7 @@ ${reminderSuffix}`;
    });
    // ----------------------------------------------
    
-   app.get("/api/config/api-toggles-unused", async (req, res) => {
+   app.get("/api/config/api-toggles-unused", async (req, res, next) => {
      const adminKey = req.headers["x-admin-key"];
      if (adminKey !== process.env.VITE_ADMIN_KEY) {
        return res.status(403).json({ error: "Thao tác không hợp lệ. Sai admin key." });
@@ -3076,7 +3065,7 @@ ${reminderSuffix}`;
      });
    });
 
-   app.post("/api/config/api-toggles", express.json(), async (req, res) => {
+   app.post("/api/config/api-toggles", express.json(), async (req, res, next) => {
       const isAllowed = await checkAdminAuth(req);
       if (!isAllowed) {
         return res.status(403).json({ error: "Thao tác không hợp lệ. Sai admin key." });
@@ -3109,7 +3098,7 @@ ${reminderSuffix}`;
         deepInfraEnabled: isDeepInfraEnabled
       });
     });
-    app.post("/api/config/api-toggles-unused", express.json(), async (req, res) => {
+    app.post("/api/config/api-toggles-unused", express.json(), async (req, res, next) => {
      const adminKey = req.headers["x-admin-key"];
      if (adminKey !== process.env.VITE_ADMIN_KEY) {
        return res.status(403).json({ error: "Thao tác không hợp lệ. Sai admin key." });
@@ -3312,7 +3301,7 @@ ${reminderSuffix}`;
 
     } catch (error: any) {
       console.error("Sync ghost users error:", error);
-      res.status(500).json({ error: error.message || "Đã xảy ra lỗi hệ thống khi đồng bộ." });
+      next(error);
     }
   });
 
@@ -3859,7 +3848,7 @@ Trả về dữ liệu dưới dạng JSON chuẩn (không dùng markdown block)
     } catch (err: any) {
       console.error("Manual Define Error:", err);
       // Let frontend handle the error explicitly.
-      return res.status(500).json({ error: true, message: err?.message || "Lỗi khi trích xuất định nghĩa." });
+      return next(err);
     }
   });
 
@@ -4003,27 +3992,27 @@ ${jsonText}`;
   });
 
   // NEW: AI LOCK ENDPOINTS FOR GRAPHICAL CLIENT CONCURRENCY SYNC
-  app.post("/api/automation/lock-ai", express.json(), async (req, res) => {
+  app.post("/api/automation/lock-ai", express.json(), async (req, res, next) => {
     try {
       const { type, userId } = req.body;
       lockAiProcessing(type || "convert", userId || "anonymous", 240000);
       return res.json({ success: true, message: "AI Lock activated successfully." });
     } catch (err: any) {
-      return res.status(500).json({ error: true, message: err.message });
+      next(err);
     }
   });
 
-  app.post("/api/automation/unlock-ai", express.json(), async (req, res) => {
+  app.post("/api/automation/unlock-ai", express.json(), async (req, res, next) => {
     try {
       releaseAiProcessing();
       return res.json({ success: true, message: "AI Lock released successfully." });
     } catch (err: any) {
-      return res.status(500).json({ error: true, message: err.message });
+      next(err);
     }
   });
 
   // --- API USAGE LOGGING (Gemini) ---
-  app.post("/api/usage/log", express.json(), async (req, res) => {
+  app.post("/api/usage/log", express.json(), async (req, res, next) => {
     try {
       if (admin.apps.length === 0) return res.json({ success: true, message: "Skipped (No admin)" });
       const { provider, model, latency, status } = req.body;
@@ -4041,11 +4030,11 @@ ${jsonText}`;
       res.json({ success: true });
     } catch (err: any) {
       console.error("Failed to log API usage:", err);
-      res.status(500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.get("/api/automation/get-streaming-key", async (req, res) => {
+  app.get("/api/automation/get-streaming-key", async (req, res, next) => {
     try {
       const activeKeys = geminiKeyStates.filter(s => s.status === "active");
       if (activeKeys.length === 0) {
@@ -4057,27 +4046,41 @@ ${jsonText}`;
       const randomIndex = Math.floor(Math.random() * activeKeys.length);
       return res.json({ success: true, key: activeKeys[randomIndex].key });
     } catch (err: any) {
-      return res.status(500).json({ error: true, message: err.message });
+      next(err);
     }
   });
 
-  app.get("/api/vibe/global-prompts", async (req, res) => {
+  app.get("/api/vibe/global-prompts", async (req, res, next) => {
     try {
       if (!admin.apps.length) return res.json({ success: true, data: [] });
+      
+      const cacheKey = "global_prompts";
+      const cachedData = appCache.get(cacheKey);
+      if (cachedData) {
+         return res.json({ success: true, data: cachedData });
+      }
+
       const db = admin.firestore();
       const snapshot = await db.collection("vibe_global_prompts")
         .orderBy("createdAt", "asc")
         .get();
-        
+      
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      appCache.set(cacheKey, data);
       res.json({ success: true, data });
     } catch (err: any) {
       console.error("Failed to fetch global prompts:", err);
-      res.status(500).json({ error: err.message });
+      const staleData = appCache.getStale("global_prompts");
+      if (staleData) {
+         console.warn("Serving stale global prompts due to firestore error");
+         return res.json({ success: true, data: staleData, stale: true });
+      }
+      next(err);
     }
   });
 
-  app.post("/api/vibe/global-prompts", express.json(), async (req, res) => {
+  app.post("/api/vibe/global-prompts", express.json(), async (req, res, next) => {
     try {
       if (admin.apps.length === 0) return res.status(503).json({ error: "Firebase admin not initialized" });
       const { title, prompt, isGlobal, creatorId } = req.body;
@@ -4096,11 +4099,11 @@ ${jsonText}`;
       res.json({ success: true, data: { id: docRef.id, ...newPrompt } });
     } catch (err: any) {
       console.error("Failed to add global prompt:", err);
-      res.status(500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.post("/api/vibe/generate-prompt", express.json(), async (req, res) => {
+  app.post("/api/vibe/generate-prompt", express.json(), async (req, res, next) => {
     try {
       const { description } = req.body;
       if (!description) return res.status(400).json({ error: "Missing description" });
@@ -4124,11 +4127,11 @@ Hãy trả về TRỰC TIẾP đoạn prompt đó, không giải thích, không 
       res.json({ success: true, prompt: responseText.trim() });
     } catch (err: any) {
       console.error("Failed to generate prompt:", err);
-      res.status(500).json({ error: err.message });
+      next(err);
     }
   });
 
-  app.post("/api/config/key-usage-sync", express.json(), async (req, res) => {
+  app.post("/api/config/key-usage-sync", express.json(), async (req, res, next) => {
     try {
       const { provider, key, metric, error } = req.body;
       if (!provider || !key || !metric) {
@@ -4222,7 +4225,7 @@ Hãy trả về TRỰC TIẾP đoạn prompt đó, không giải thích, không 
       return res.json({ success: true, index: matchedState.index, status: matchedState.status });
     } catch (err: any) {
       console.error("Error in key-usage-sync endpoint:", err);
-      return res.status(500).json({ error: true, message: err.message });
+      next(err);
     }
   });
 
@@ -4252,7 +4255,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 // Vite middleware for development
 // --- NEW SMART DELTA SYNC ENDPOINTS ---
-app.get("/api/sync", async (req, res) => {
+app.get("/api/sync", async (req, res, next) => {
   try {
     const authHeader = req.headers["authorization"];
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -4330,11 +4333,11 @@ app.get("/api/sync", async (req, res) => {
     res.json({ success: true, data: payload });
   } catch (error: any) {
     console.error("Delta pull error:", error);
-    res.status(500).json({ error: "Internal server error during delta pull" });
+    next(error);
   }
 });
 
-app.post("/api/admin/decks/:deckId/bulk-overwrite", express.json({ limit: '10mb' }), async (req, res) => {
+app.post("/api/admin/decks/:deckId/bulk-overwrite", express.json({ limit: '10mb' }), async (req, res, next) => {
   try {
     const authHeader = req.headers["authorization"];
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -4393,11 +4396,11 @@ app.post("/api/admin/decks/:deckId/bulk-overwrite", express.json({ limit: '10mb'
     res.json({ success: true, message: "Bulk overwrite successful", serverTime: Date.now() });
   } catch (error: any) {
     console.error("Bulk overwrite error:", error);
-    res.status(500).json({ error: "Internal server error during bulk overwrite" });
+    next(error);
   }
 });
 
-app.post("/api/sync/push", express.json({ limit: '10mb' }), async (req, res) => {
+app.post("/api/sync/push", express.json({ limit: '10mb' }), async (req, res, next) => {
   try {
     const authHeader = req.headers["authorization"];
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -4481,7 +4484,7 @@ app.post("/api/sync/push", express.json({ limit: '10mb' }), async (req, res) => 
     res.json({ success: true, processedIds, serverTime: Date.now() });
   } catch (error: any) {
     console.error("Batch push error:", error);
-    res.status(500).json({ error: "Internal server error during batch push" });
+    next(error);
   }
 });
 

@@ -1130,6 +1130,7 @@ Acknowledge this protocol. Execute all text transformations deterministically at
         `🔮 [SEMAPHORE STARTING] Kích hoạt luồng trích xuất tuần tự (Chunk Size: ${chunkSize} dòng) bảo đảm an toàn, bứt tốc 1000 thẻ.`,
       );
 
+      const initialKeysStatus = await getKeysStatus();
       let completedCount = startChunk;
 
       for (let cIdx = startChunk; cIdx < totalChunks; cIdx++) {
@@ -1150,7 +1151,7 @@ Acknowledge this protocol. Execute all text transformations deterministically at
         // 2. Key status check (Throttled rate)
         if (cIdx % 3 === 0) {
           try {
-            const currentKeys = await getKeysStatus();
+            const currentKeys = initialKeysStatus; // Fixed: moved getKeysStatus outside loop
             if (currentKeys && !isCanceledRef.current) {
               const activeKeys = currentKeys.filter(
                 (k: any) => k.status === "active",

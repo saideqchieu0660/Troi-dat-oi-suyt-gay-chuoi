@@ -2086,6 +2086,30 @@ function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+import { useBatchConfig } from "./hooks/useConfig";
+import { updateApiProviderConfig, aiPromptsConfig } from "./utils/apiClient";
+import { nextGenPromptManager } from "./services/next_gen/promptManager";
+import { useEffect } from "react";
+
+function AppConfigLoader() {
+  const { data } = useBatchConfig();
+  
+  useEffect(() => {
+    if (data) {
+      updateApiProviderConfig({
+        openRouter: data.toggles.openRouterEnabled !== false,
+        gemini: data.toggles.geminiEnabled !== false,
+        groq: data.toggles.groqEnabled !== false,
+        deepInfra: data.toggles.deepInfraEnabled !== false,
+      });
+      Object.assign(aiPromptsConfig, data.prompts);
+      nextGenPromptManager.applyConfigFromNetwork(data.prompts);
+    }
+  }, [data]);
+  
+  return null;
+}
+
 export default function App() {
   const location = useLocation();
 
@@ -2093,6 +2117,7 @@ export default function App() {
     <ThemeProvider>
       <Toaster position="bottom-right" richColors />
       <GlobalErrorReporter />
+      <AppConfigLoader />
       <Layout>
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>

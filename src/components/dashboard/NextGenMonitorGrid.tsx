@@ -116,8 +116,8 @@ export function NextGenMonitorGrid() {
     };
 
     fetchKeys();
-    const interval = setInterval(fetchKeys, 2000);
-    return () => clearInterval(interval);
+    // const interval = setInterval(fetchKeys, 2000);
+    // return () => clearInterval(interval);
   }, []);
 
   const handleToggleChange = async (provider: 'gemini' | 'cerebras', newValue: boolean) => {

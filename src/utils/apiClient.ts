@@ -929,13 +929,7 @@ async function syncProviderToggles() {
   }
 }
 
-if (typeof window !== "undefined") {
-  setTimeout(syncProviderToggles, 1000);
-  setInterval(syncProviderToggles, 30000); // Periodically check for remote API circuit breaker flips from administrator
-
-  setTimeout(syncAIPrompts, 1500);
-  setInterval(syncAIPrompts, 45000); // Periodically check for remote AI prompts adjustments
-}
+// Config loading is now handled by React Query in App.tsx via useBatchConfig
 
 // Utility to parse environment keys, avoiding duplicates
 export function parseKeys(prefixes: string[]): string[] {

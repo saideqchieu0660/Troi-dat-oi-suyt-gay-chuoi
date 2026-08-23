@@ -27,8 +27,8 @@ export default function VibeApiHealthMonitor() {
 
   useEffect(() => {
     fetchKeys();
-    const interval = setInterval(fetchKeys, 2000);
-    return () => clearInterval(interval);
+    // const interval = setInterval(fetchKeys, 2000);
+    // return () => clearInterval(interval);
   }, []);
 
   const handleTestRequest = async (type: 'success' | '429' | '403') => {

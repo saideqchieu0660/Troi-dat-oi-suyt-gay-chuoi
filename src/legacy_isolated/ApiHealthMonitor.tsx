@@ -189,8 +189,8 @@ export function ServiceMonitor({
     };
 
     fetchKeys();
-    const interval = setInterval(fetchKeys, 2000);
-    return () => clearInterval(interval);
+    // const interval = setInterval(fetchKeys, 2000);
+    // return () => clearInterval(interval);
   }, [isOpen]);
 
   const handleToggleChange = async (provider: 'cerebras' | 'gemini', newValue: boolean) => {

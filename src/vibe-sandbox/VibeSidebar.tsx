@@ -171,6 +171,13 @@ export const VibeSidebar: React.FC<VibeSidebarProps> = ({
       action: () => handleSelectTab("all_sets"),
     },
     {
+      id: "notebook",
+      label: "📓 Sổ Tay Cá Nhân",
+      icon: BookOpen,
+      action: () => handleSelectTab("notebook"),
+    },
+
+    {
       id: "create_deck",
       label: "✨ Tạo Bộ Thẻ",
       icon: Plus,

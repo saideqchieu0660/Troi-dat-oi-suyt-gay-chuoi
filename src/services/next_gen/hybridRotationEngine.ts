@@ -8,6 +8,8 @@ export type KeyStatus = {
 };
 
 import { store } from "../../lib/store";
+import { dispatchTerminalLog } from "../../vibe-sandbox/VibeTerminalOverlay";
+
 
 class HybridRotationEngine {
   private systemKeys: KeyStatus[] = [];
@@ -142,9 +144,11 @@ class HybridRotationEngine {
     if (key) {
       key.usageCount++;
       key.status = 'COOLING_DOWN';
+      dispatchTerminalLog(`[KEY CYCLE] Assigned request to key: ${key.maskedKey}. Entering 12s cooldown.`, 'success');
       setTimeout(() => {
         if (key.status === 'COOLING_DOWN') {
           key.status = 'READY';
+          dispatchTerminalLog(`[KEY CYCLE] Cooldown finished for key: ${key.maskedKey}. Ready for use.`, 'info');
         }
       }, 12000);
     }
@@ -154,9 +158,11 @@ class HybridRotationEngine {
     const key = this.systemKeys.find(k => k.key === keyString);
     if (key) {
       key.status = 'ISOLATED';
+      dispatchTerminalLog(`[CIRCUIT BREAKER] Key ${key.maskedKey} has been ISOLATED for 60 seconds due to errors/rate limits!`, 'error');
       setTimeout(() => {
         if (key.status === 'ISOLATED') {
           key.status = 'READY';
+          dispatchTerminalLog(`[CIRCUIT BREAKER] Isolation ended for key: ${key.maskedKey}. Restored to pool.`, 'success');
         }
       }, 60000);
     }

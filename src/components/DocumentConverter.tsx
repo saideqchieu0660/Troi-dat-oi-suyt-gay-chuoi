@@ -52,6 +52,8 @@ import { safeRequest } from "../utils/apiClient";
 import { splitIntoChunks } from "../utils/textProcessor";
 import { optimizeFormattingBatch } from "../formatting/formattingClient";
 import { nextGenIngestionEngine } from "../services/next_gen/unifiedIngestionEngine";
+import { dispatchTerminalLog } from "../vibe-sandbox/VibeTerminalOverlay";
+
 
 // 1. Unified Client-Side Clean-up utility
 function isCleanHumanLine(line: string): boolean {
@@ -689,17 +691,21 @@ export default function DocumentConverter() {
     // 1. Fetch secured active key from server securely
     const keyRes = await fetch("/api/automation/get-streaming-key");
     if (!keyRes.ok) {
+      dispatchTerminalLog(`[GEMINI ENGINE] Server denied key request (Status ${keyRes.status})`, 'error');
       throw new Error(
         `Kho khóa API rỗng hoặc server đang bảo trì (Status ${keyRes.status})`,
       );
     }
     const keyData = await keyRes.json();
     if (!keyData.success || !keyData.key) {
+      dispatchTerminalLog(`[GEMINI ENGINE] Key pool exhausted or empty`, 'error');
       throw new Error(
         keyData.message || "Không tìm thấy khóa Gemini hoạt động.",
       );
     }
     const securedKey = keyData.key;
+    const maskedKey = securedKey.substring(0, 4) + "***" + securedKey.substring(securedKey.length - 4);
+    dispatchTerminalLog(`[GEMINI ROTATION] Server allocated active Gemini key: ${maskedKey}`, 'success');
 
     // Set progression text with streaming details
     setStreamedBytes(0);
@@ -708,6 +714,7 @@ export default function DocumentConverter() {
     // 2. Setup REST stream generate content endpoint
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:streamGenerateContent?key=${securedKey}`;
 
+    dispatchTerminalLog(`[GEMINI ENGINE] Initiating direct stream generateContent request...`, 'info');
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

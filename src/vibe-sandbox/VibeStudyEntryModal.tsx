@@ -8,6 +8,7 @@ import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { get } from 'idb-keyval';
 import { VibeSyncEngine } from './sync/VibeSyncEngine';
+import { smartPullDeck } from './sync/VibeSyncRescue';
 
 interface BackupData {
   deckId: string;
@@ -25,6 +26,29 @@ export function VibeStudyEntryModal({ isOpen, onClose, deck }: VibeStudyEntryMod
   const navigate = useNavigate();
   const [isConfirmingRestore, setIsConfirmingRestore] = useState(false);
   const [lastBackup, setLastBackup] = useState<BackupData | null>(null);
+  const [isAutoPulling, setIsAutoPulling] = useState(false);
+  const [pullStatus, setPullStatus] = useState<'idle'|'syncing'|'success'|'error'>('idle');
+
+  
+  useEffect(() => {
+    if (isOpen && deck) {
+      setIsAutoPulling(true);
+      setPullStatus('syncing');
+      smartPullDeck(deck.id, false)
+        .then(() => {
+          setPullStatus('success');
+        })
+        .catch((err) => {
+          console.error("Auto pull failed", err);
+          setPullStatus('error');
+        })
+        .finally(() => {
+          setIsAutoPulling(false);
+          // Optional: clear success message after some time
+          setTimeout(() => setPullStatus('idle'), 3000);
+        });
+    }
+  }, [isOpen, deck]);
 
   const weakCardIds = useMemo(() => {
     if (!deck || !deck.cards) return [];
@@ -150,14 +174,35 @@ export function VibeStudyEntryModal({ isOpen, onClose, deck }: VibeStudyEntryMod
             <div className="p-5 border-b border-zinc-100 dark:border-zinc-800/60 flex items-start justify-between bg-zinc-50/50 dark:bg-zinc-950/20">
               <div className="pr-8">
                 <h3 className="font-extrabold text-xl text-zinc-900 dark:text-zinc-100 line-clamp-1">{deck.title}</h3>
-                <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-2">
+                <div className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-2">
                   <span className="font-semibold bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-md">{deck.cards.length} thẻ</span>
                   {weakCardIds.length > 0 && (
                     <span className="font-semibold text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-500/10 px-2 py-0.5 rounded-md">
                       {weakCardIds.length} thẻ X
                     </span>
                   )}
-                </p>
+
+                <div className="flex items-center gap-1.5 mt-1 opacity-70">
+                  {pullStatus === 'syncing' && (
+                    <>
+                      <RefreshCw className="w-3 h-3 animate-spin text-zinc-500" />
+                      <span className="text-[11px] font-medium text-zinc-500">Đang đồng bộ...</span>
+                    </>
+                  )}
+                  {pullStatus === 'success' && (
+                    <>
+                      <span className="text-[11px] font-medium text-green-600 dark:text-green-400">Dữ liệu mới nhất</span>
+                    </>
+                  )}
+                  {pullStatus === 'error' && (
+                    <>
+                      <AlertTriangle className="w-3 h-3 text-red-500" />
+                      <span className="text-[11px] font-medium text-red-500">Đồng bộ thất bại</span>
+                    </>
+                  )}
+                </div>
+
+                </div>
               </div>
               <button onClick={onClose} className="p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full transition-colors cursor-pointer absolute top-4 right-4 bg-zinc-100 dark:bg-zinc-900 shadow-sm border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
                 <X className="w-5 h-5" />

@@ -170,3 +170,158 @@ export async function forceMergeRescue(): Promise<string> {
     return log.join('\n');
   }
 }
+
+export async function smartPushDeck(deckId: string): Promise<string> {
+  const user = store.getCurrentUser() || auth.currentUser;
+  if (!user) throw new Error("No authenticated user.");
+  const uid = typeof user === 'string' ? user : (user as any).uid || (user as any).id;
+  if (!uid) throw new Error("Could not determine user ID.");
+
+  try {
+    const { VibeSyncEngine } = await import("./VibeSyncEngine");
+    const { CardStateManager } = await import("../../lib/CardStateManager");
+    const { VibeProgressSyncManager } = await import("./VibeProgressSyncManager");
+    const { setDoc } = await import("firebase/firestore");
+
+    // 1. Get Deck's card IDs
+    const deck = await VibeSyncEngine.getDeck(deckId);
+    if (!deck || !deck.cards) return "Deck not found locally.";
+    const cardIds = deck.cards.map((c: any) => c.id);
+
+    // 2. Fetch local states
+    const localCardStates: Record<string, any> = {};
+    cardIds.forEach(cId => {
+        const state = CardStateManager.getCardState(uid, cId);
+        if (state) localCardStates[cId] = state;
+    });
+
+    // 3. Fetch cloud states
+    let cloudCardStates: Record<string, any> = {};
+    const deckStateRef = doc(db, "users", uid, "vibe_deckStates", deckId);
+    const snap = await getDoc(deckStateRef);
+    if (snap.exists()) {
+        cloudCardStates = snap.data()?.states || {};
+    }
+
+    // 4. Merge LWW
+    const mergedCardStates: Record<string, any> = {};
+    for (const cId of cardIds) {
+        const local = localCardStates[cId];
+        const cloud = cloudCardStates[cId];
+        
+        if (local && cloud) {
+            const localTime = local.updatedAt || local.lastUpdatedAt || 0;
+            const cloudTime = cloud.updatedAt || cloud.lastUpdatedAt || 0;
+            if (localTime === cloudTime) {
+                const localM = local.mastery || 0;
+                const cloudM = cloud.mastery || 0;
+                mergedCardStates[cId] = localM > cloudM ? local : cloud;
+            } else {
+                mergedCardStates[cId] = localTime > cloudTime ? local : cloud;
+            }
+        } else {
+            if (local || cloud) {
+                mergedCardStates[cId] = local || cloud;
+            }
+        }
+    }
+
+    // 5. Save back to Local (without triggering queue)
+    for (const [cId, state] of Object.entries(mergedCardStates)) {
+        await CardStateManager.updateCardState(uid, cId, state);
+    }
+
+    // 6. Push to Cloud
+    if (Object.keys(mergedCardStates).length > 0) {
+        await setDoc(deckStateRef, {
+            states: mergedCardStates,
+            deckId: deckId,
+            lastUpdatedAt: Date.now()
+        }, { merge: true });
+    }
+
+    // 7. Push session progress
+    await VibeProgressSyncManager.pushProgressToCloud(uid, deckId);
+
+    // Try flushing the general sync queue as well
+    await VibeSyncEngine.syncNow();
+
+    return "OK";
+  } catch (error: any) {
+    console.error("Smart Push Deck Error", error);
+    throw error;
+  }
+}
+
+export async function smartPullDeck(deckId: string, forceBypassCache: boolean = false): Promise<string> {
+  const user = store.getCurrentUser() || auth.currentUser;
+  if (!user) throw new Error("No authenticated user.");
+  const uid = typeof user === 'string' ? user : (user as any).uid || (user as any).id;
+  if (!uid) throw new Error("Could not determine user ID.");
+
+  try {
+    const { VibeSyncEngine } = await import("./VibeSyncEngine");
+    const { CardStateManager } = await import("../../lib/CardStateManager");
+    const { getDoc, getDocFromServer } = await import("firebase/firestore");
+
+    // 1. Get Deck's card IDs from local store
+    const deck = await VibeSyncEngine.getDeck(deckId);
+    if (!deck || !deck.cards) return "Deck not found locally.";
+    const cardIds = deck.cards.map((c: any) => c.id);
+
+    // 2. Fetch local states
+    const localCardStates: Record<string, any> = {};
+    cardIds.forEach((cId: string) => {
+        const state = CardStateManager.getCardState(uid, cId);
+        if (state) localCardStates[cId] = state;
+    });
+
+    // 3. Fetch cloud states (Selective: only 1 read)
+    let cloudCardStates: Record<string, any> = {};
+    const deckStateRef = doc(db, "users", uid, "vibe_deckStates", deckId);
+    
+    console.log(`[FIRESTORE READ] VibeSyncRescue: smartPullDeck on vibe_deckStates/${deckId}`);
+    
+    // Manual pull should bypass cache
+    const snap = forceBypassCache ? await getDocFromServer(deckStateRef) : await getDoc(deckStateRef);
+    
+    if (snap.exists()) {
+        cloudCardStates = snap.data()?.states || {};
+    } else {
+        return "No progress found on Cloud.";
+    }
+
+    // 4. Merge LWW (Last-Write-Wins)
+    let updateCount = 0;
+    for (const cId of cardIds) {
+        const local = localCardStates[cId];
+        const cloud = cloudCardStates[cId];
+        
+        let chosenState = null;
+        if (local && cloud) {
+            const localTime = local.updatedAt || local.lastUpdatedAt || 0;
+            const cloudTime = cloud.updatedAt || cloud.lastUpdatedAt || 0;
+            if (localTime === cloudTime) {
+                const localM = local.mastery || 0;
+                const cloudM = cloud.mastery || 0;
+                chosenState = localM > cloudM ? local : cloud;
+            } else {
+                chosenState = localTime > cloudTime ? local : cloud;
+            }
+        } else {
+            chosenState = local || cloud;
+        }
+
+        // 5. Update local state reactively via CardStateManager
+        if (chosenState && (!local || JSON.stringify(local) !== JSON.stringify(chosenState))) {
+            await CardStateManager.updateCardState(uid, cId, chosenState);
+            updateCount++;
+        }
+    }
+
+    return `Synced ${updateCount} updates.`;
+  } catch (error: any) {
+    console.error("Smart Pull Deck Error", error);
+    throw error;
+  }
+}

@@ -51,6 +51,7 @@ import {
   BookOpen,
   CloudUpload,
 } from "lucide-react";
+import { VibeDeckSyncWidget } from "./components/VibeDeckSyncWidget";
 import { DiffViewer } from "../components/DiffViewer";
 import {
   playFlipSound,
@@ -2764,6 +2765,8 @@ export default function VibeStudyRoom() {
                   </div>
                 </div>
               </div>
+
+              {deck?.id && <VibeDeckSyncWidget deckId={deck.id} />}
 
               {/* Actions list */}
               <div className="flex flex-col gap-3">

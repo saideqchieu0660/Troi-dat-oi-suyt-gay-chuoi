@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { MoreVertical, Pin, PinOff, Edit3, Share2, DownloadCloud, FileJson, Layers, Check, Save, CloudUpload } from 'lucide-react';
+import { MoreVertical, Pin, PinOff, Edit3, Share2, DownloadCloud, FileJson, Layers, Check, Save, CloudUpload, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Deck, store } from '../lib/store';
 import { downloadCourseForOffline, getAllOfflineDecks } from '../utils/offlineDb';
 import { isFeatureEnabled } from '../features.config';
 import { set } from 'idb-keyval';
+import { smartPullDeck } from '../vibe-sandbox/sync/VibeSyncRescue';
 import { VibeProgressSyncManager } from '../vibe-sandbox/sync/VibeProgressSyncManager';
 
 export const DeckOptionsMenu = ({ 
@@ -18,6 +19,7 @@ export const DeckOptionsMenu = ({
 }) => {
   const [showDeckMenu, setShowDeckMenu] = useState(false);
   const [pinnedDecks, setPinnedDecks] = useState<string[]>([]);
+  const [isPulling, setIsPulling] = useState(false);
   const [downloadingDecks, setDownloadingDecks] = useState<Set<string>>(new Set());
   const [offlineDeckIds, setOfflineDeckIds] = useState<Set<string>>(new Set());
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -81,6 +83,22 @@ export const DeckOptionsMenu = ({
       window.dispatchEvent(new CustomEvent("vibe-pinned-updated", { detail: { pinnedDecks: newPinned } }));
       return newPinned;
     });
+  };
+
+  
+  const handlePull = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowDeckMenu(false);
+    setIsPulling(true);
+    try {
+      await smartPullDeck(deck.id, true);
+      toast.success("Đã đồng bộ tiến trình thành công!");
+    } catch (err: any) {
+      toast.error(err.message || "Lỗi khi đồng bộ tiến trình.");
+    } finally {
+      setIsPulling(false);
+    }
   };
 
   const handleDownloadOffline = async (e: React.MouseEvent) => {
@@ -249,6 +267,16 @@ export const DeckOptionsMenu = ({
                 Tải xuống Offline
               </button>
             )}
+
+            
+            <button
+              onClick={handlePull}
+              disabled={isPulling}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-900 dark:text-zinc-100 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isPulling ? "animate-spin" : ""}`} />
+              Đồng bộ thủ công
+            </button>
 
             <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-1"></div>
 

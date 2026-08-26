@@ -68,6 +68,7 @@ import { isFeatureEnabled } from "../features.config";
 import { VibeFlashcardActiveView } from "../vibe-sandbox/VibeFlashcardActiveView";
 import { VibeClassModal } from "../vibe-sandbox/VibeClassModal";
 import { EditDeckModal } from "../components/EditDeckModal";
+import { VibeTerminalOverlay, dispatchTerminalLog } from "./VibeTerminalOverlay";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -1410,6 +1411,7 @@ export default function VibeStudyRoom() {
       if (!auth.currentUser)
         throw new Error("Vui lòng đăng nhập để sử dụng AI.");
 
+      console.log(`[AI AGENT] Gọi Agent 1: Auto-Fill (Hydrate) thông tin thẻ`, 'info');
       const res = await safeRequest("/api/automation/hydrate-card", {
         method: "POST",
         body: JSON.stringify({
@@ -1848,6 +1850,7 @@ export default function VibeStudyRoom() {
 
     try {
       const idToken = (await auth.currentUser?.getIdToken()) || "";
+      console.log(`[AI AGENT] Gọi Agent 2: Bắt đầu giải thích chuyên sâu`, 'info');
       const res = await safeRequest("/api/agent2/explain", {
         method: "POST",
         headers: {
@@ -1906,6 +1909,7 @@ export default function VibeStudyRoom() {
     const contextualPrompt = `Thẻ học hiện tại:\nMặt trước (Từ khóa/Câu hỏi): ${currentCard?.front || "Trống"}\nMặt sau (Nghĩa/Đáp án): ${currentCard?.back || "Trống"}\nVí dụ mẫu: ${currentCard?.example_sentence || "Không có"}\nChủ đề: ${currentCard?.subject || "Khác"}`;
 
     try {
+      console.log(`[AI AGENT] Gọi Agent 3: Bắt đầu Chatbot AI`, 'info');
       const res = await safeRequest("/api/agent3/chat", {
         method: "POST",
         headers: {
@@ -2043,7 +2047,8 @@ export default function VibeStudyRoom() {
 
       let data;
       try {
-        const res = await safeRequest("/api/agent3/chat", {
+        console.log(`[AI AGENT] Gọi Agent 3: Bắt đầu Chatbot AI`, 'info');
+      const res = await safeRequest("/api/agent3/chat", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -2070,6 +2075,7 @@ export default function VibeStudyRoom() {
       } catch (err: any) {
         // Fallback Retry
         toast.error(`Lỗi kết nối AI: ${err.message || err}. Đang xoay vòng API...`, { duration: 4000 });
+        console.log(`[AI AGENT] Gửi đánh giá cho Agent 3`, 'info');
         const res2 = await safeRequest("/api/agent3/chat", {
           method: "POST",
           headers: {
@@ -2363,6 +2369,7 @@ export default function VibeStudyRoom() {
 
     setIsTranslatingDefinition(true);
     try {
+      // removed boring log
       const res = await safeRequest("/api/vibe/translate-definition", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3203,6 +3210,7 @@ export default function VibeStudyRoom() {
         message="Bạn có chắc chắn muốn AI tự động dịch phần định nghĩa tiếng Anh của thẻ này sang tiếng Việt không? Nội dung cũ sẽ bị thay thế."
         confirmText="Dịch ngay"
       />
+      <VibeTerminalOverlay />
     </>
   );
 }

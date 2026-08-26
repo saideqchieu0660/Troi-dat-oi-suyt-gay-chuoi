@@ -1985,6 +1985,7 @@ async function executeFetchWithBackoffAndEvasion(
 
       if (response.ok) {
         resetCircuitBreaker();
+        extractAITrace(response);
 
         // Write standard cache asynchronously
         try {
@@ -2061,6 +2062,7 @@ async function executeFetchWithBackoffAndEvasion(
         }
       }
 
+      extractAITrace(response);
       // Client errors (400 - 499, except 429 and 408) - abort early without repeating
       if (response.status >= 400 && response.status < 500) {
         let errorData;
@@ -2184,6 +2186,38 @@ async function executeFetchWithBackoffAndEvasion(
     `Đã thử lại ${maxAttempts} lần tiến trình nhưng yêu cầu vẫn bất thành.`,
   );
 }
+
+const extractAITrace = (response: Response) => {
+  try {
+    const aiTraceB64 = response.headers.get("X-AI-Trace");
+    if (aiTraceB64 && typeof window !== "undefined") {
+        const traceStr = atob(aiTraceB64);
+        const traces = JSON.parse(traceStr);
+        for (const t of traces) {
+            const providerName = t.p.toUpperCase();
+            if (t.s === 'OK') {
+                window.dispatchEvent(new CustomEvent('vibe-terminal-log', {
+                  detail: { message: `[AI DISPATCHER] Mạng lưới điều phối gọi THÀNH CÔNG mô hình từ ${providerName} (Key: ${t.k})`, type: 'success' }
+                }));
+            } else if (t.s === 'CACHE') {
+                window.dispatchEvent(new CustomEvent('vibe-terminal-log', {
+                  detail: { message: `[AI CACHE] ${t.m}`, type: 'success' }
+                }));
+            } else if (t.s === 'RATE_LIMIT') {
+                window.dispatchEvent(new CustomEvent('vibe-terminal-log', {
+                  detail: { message: `[AI DISPATCHER] ${providerName} BỊ RATE LIMIT / QUÁ TẢI. Tự động xoay sang API dự phòng...`, type: 'warn' }
+                }));
+            } else {
+                window.dispatchEvent(new CustomEvent('vibe-terminal-log', {
+                  detail: { message: `[AI DISPATCHER] ${providerName} LỖI: ${t.m}. Xoay sang API dự phòng...`, type: 'error' }
+                }));
+            }
+        }
+        return true;
+    }
+  } catch(e) {}
+  return false;
+};
 
 export async function safeRequest(
   url: string,

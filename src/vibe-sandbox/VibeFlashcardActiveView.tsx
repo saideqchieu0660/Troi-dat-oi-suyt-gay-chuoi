@@ -162,7 +162,8 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
     }
     setIsGeneratingPrompt(true);
     try {
-      const res = await safeFetch("/api/vibe/generate-prompt", {
+      const { safeRequest } = await import("../utils/apiClient");
+      const res = await safeRequest("/api/vibe/generate-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: newGlobalTitle })
@@ -176,11 +177,12 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
           toast.error("Không thể tạo prompt, vui lòng thử lại.");
         }
       } else {
-        toast.error("Lỗi kết nối khi tạo prompt.");
+        const errData = await res.json().catch(() => ({}));
+        toast.error(errData.message || "Lỗi kết nối khi tạo prompt.");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      toast.error("Đã xảy ra lỗi khi tạo prompt.");
+      toast.error(e.message || "Đã xảy ra lỗi khi tạo prompt.");
     } finally {
       setIsGeneratingPrompt(false);
     }
@@ -298,7 +300,8 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
     if (isFormatting || !currentCard) return;
     setIsFormatting(true);
     try {
-      const res = await safeFetch("/api/automation/format-card", {
+      const { safeRequest } = await import("../utils/apiClient");
+      const res = await safeRequest("/api/automation/format-card", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

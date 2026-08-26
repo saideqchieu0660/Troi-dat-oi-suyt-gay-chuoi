@@ -1,5 +1,5 @@
 export const GROQ_MODELS = {
-  PRIMARY: "llama2-70b-4096",
+  PRIMARY: "llama3-8b-8192",
   FALLBACK: "mixtral-8x7b-32768"
 };
 
@@ -50,13 +50,16 @@ export async function executeGroqRequest(promptText: string, config: GroqConfig 
     return data.choices?.[0]?.message?.content || "";
   };
 
-  const MAX_RETRIES = 2;
+  const MAX_RETRIES = 3; // Tăng retry lên 3 nhưng với backoff
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
        return await makeRequest(GROQ_MODELS.PRIMARY);
     } catch (err: any) {
        console.warn(`[groq] Primary model ${GROQ_MODELS.PRIMARY} failed (Attempt ${attempt}/${MAX_RETRIES}):`, err.message);
+       
+       const isRateLimitOrServerError = err.message.includes('429') || err.message.includes('503') || err.message.includes('500');
+       
        if (attempt === MAX_RETRIES) {
           console.warn(`[groq] Falling back to ${GROQ_MODELS.FALLBACK}...`);
           try {
@@ -65,8 +68,12 @@ export async function executeGroqRequest(promptText: string, config: GroqConfig 
              throw new Error(`Both Primary and Fallback models failed. Fallback error: ${fallbackErr.message}`);
           }
        }
-       // Wait before retry
-       await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+       
+       // Exponential backoff logic with jitter
+       const baseDelay = isRateLimitOrServerError ? 2000 : 1000;
+       const delay = baseDelay * Math.pow(2, attempt - 1) + Math.random() * 500;
+       console.log(`[groq] Waiting ${delay.toFixed(0)}ms before retry...`);
+       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
   

@@ -1,5 +1,7 @@
 console.log("Initializing API Server...");
 import express from "express";
+import { AsyncLocalStorage } from "async_hooks";
+const asyncLocalStorage = new AsyncLocalStorage<any>();
 import NodeCache from "node-cache";
 import path from "path";
 import os from "os";
@@ -1156,6 +1158,7 @@ async function _executeGenerateContentRoundRobinInternal(contents: any, config: 
   }
 
   let finalError: any = null;
+  let traceLogs: any[] = [];
 
   for (const provider of activeProviders) {
     try {
@@ -1196,31 +1199,55 @@ async function _executeGenerateContentRoundRobinInternal(contents: any, config: 
             }
           });
           const text = response?.text || response?.response?.text?.() || "";
-          if (text) return text;
+          if (text) {
+             const keyInfo = config.byokKey ? "BYOK_KEY" : (state ? state.maskedKey : "SERVER_KEY");
+             traceLogs.push({ p: "gemini", s: "OK", k: keyInfo });
+             const store = asyncLocalStorage.getStore();
+             if (store && store.res) {
+                 store.res.setHeader("X-AI-Provider", "gemini");
+                 store.res.setHeader("X-AI-Key", keyInfo);
+                 store.res.setHeader("X-AI-Trace", Buffer.from(JSON.stringify(traceLogs)).toString("base64"));
+             }
+             return text;
+          }
         } catch (err: any) {
           const errMsg = (err?.message || "").toLowerCase();
+          let isRateLimit = false;
           if (errMsg.includes("429") || errMsg.includes("too many") || errMsg.includes("quota") || errMsg.includes("overloaded") || errMsg.includes("503") || errMsg.includes("500") || errMsg.includes("504")) {
              console.warn("[gemini] Rate limit/Overload detected. Triggering 1-minute cooldown.");
              providerCooldowns.gemini = Date.now() + COOLDOWN_MS;
+             isRateLimit = true;
           } else {
              console.warn("[gemini] Provider failed, trying fallback...", err?.message);
           }
+          traceLogs.push({ p: "gemini", s: isRateLimit ? "RATE_LIMIT" : "ERROR", m: (err?.message || "").substring(0, 50) });
           if (state) handleGeminiError(state, err);
           finalError = err;
         }
       } else if (provider === "groq") {
         try {
           const text = await executeGroqRequest(promptText, config);
-          if (text) return text;
+          if (text) {
+             traceLogs.push({ p: "groq", s: "OK", k: "GROQ_KEY" });
+             const store = asyncLocalStorage.getStore();
+             if (store && store.res) {
+                 store.res.setHeader("X-AI-Provider", "groq");
+                 store.res.setHeader("X-AI-Key", "GROQ_KEY");
+                 store.res.setHeader("X-AI-Trace", Buffer.from(JSON.stringify(traceLogs)).toString("base64"));
+             }
+             return text;
+          }
         } catch (err: any) {
           const errMsg = (err?.message || "").toLowerCase();
+          let isRateLimit = false;
           if (errMsg.includes("429") || errMsg.includes("too many") || errMsg.includes("503") || errMsg.includes("500") || errMsg.includes("504") || errMsg.includes("rate limit")) {
              console.warn("[groq] Rate limit/Overload detected. Triggering 1-minute cooldown.");
              providerCooldowns.groq = Date.now() + COOLDOWN_MS;
+             isRateLimit = true;
           } else {
              console.warn("[groq] Provider failed, trying fallback...", err?.message);
           }
-          if (state) handleGeminiError(state, err);
+          traceLogs.push({ p: "groq", s: isRateLimit ? "RATE_LIMIT" : "ERROR", m: (err?.message || "").substring(0, 50) });
           finalError = err;
         }
       }
@@ -1229,10 +1256,22 @@ async function _executeGenerateContentRoundRobinInternal(contents: any, config: 
     }
   }
 
+    if (finalError) {
+      const store = asyncLocalStorage.getStore();
+      if (store && store.res) {
+          store.res.setHeader("X-AI-Trace", Buffer.from(JSON.stringify(traceLogs)).toString("base64"));
+      }
+  }
   throw finalError || new Error("All API Providers failed");
 }
 
 const app = express();
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Expose-Headers", "X-AI-Trace, X-AI-Provider, X-AI-Key");
+  asyncLocalStorage.run({ res }, () => {
+    next();
+  });
+});
 const myCache = new NodeCache({ stdTTL: 60 });
 const configCache = new NodeCache({ stdTTL: 600 });
 
@@ -2140,6 +2179,11 @@ KHÔNG sử dụng Markdown code block. TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY 
       const cacheKey = "translate_" + Buffer.from(text).toString("base64").substring(0, 50);
       const cachedData = appCache.get(cacheKey);
       if (cachedData) {
+         let traceLogs = [{ p: "system", s: "CACHE", m: "Truy xuất kết quả định nghĩa từ bộ nhớ đệm Cache (0đ/Không gọi API)" }];
+         const store = asyncLocalStorage.getStore();
+         if (store && store.res) {
+             store.res.setHeader("X-AI-Trace", Buffer.from(JSON.stringify(traceLogs)).toString("base64"));
+         }
          return res.json({ translatedText: cachedData.translatedText });
       }
 
@@ -2733,6 +2777,11 @@ ${reminderSuffix}`;
       const { userId, deckId } = req.query;
       if (!userId) return res.status(400).json({ error: "Missing userId" });
       
+      if (!admin.apps.length) {
+        return res.status(503).json({ error: "Firebase Admin not initialized" });
+      }
+      const db = admin.firestore();
+
       const cacheKey = `vibe_decks_${userId}_${deckId || 'all'}`;
       const cached = myCache.get(cacheKey);
       if (cached) return res.json(cached);

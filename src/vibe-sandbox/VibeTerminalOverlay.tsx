@@ -114,28 +114,28 @@ export const VibeTerminalOverlay: React.FC = () => {
             {/* Terminal Header */}
             <div className="flex items-center justify-between px-4 py-3 bg-zinc-900 border-b border-zinc-800 select-none cursor-pointer" onClick={() => setIsMinimized(!isMinimized)}>
               <div className="flex items-center gap-2 text-zinc-400 text-xs">
-                <Terminal className="w-4 h-4 text-green-500" />
+                <Terminal className="w-5 h-5 text-green-500" />
                 <span className="font-semibold tracking-wider">UNITED_ENGINE_TERMINAL // v8.0</span>
               </div>
               <div className="flex items-center gap-3">
                 <button 
                   onClick={(e) => { e.stopPropagation(); setLogs([]); }}
-                  className="text-zinc-500 hover:text-red-400 transition-colors"
+                  className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors bg-zinc-800/50 hover:bg-zinc-800 rounded-md"
                   title="Clear Logs"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-5 h-5" />
                 </button>
                 <button 
                   onClick={(e) => { e.stopPropagation(); setIsMinimized(!isMinimized); }}
-                  className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                  className="p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors bg-zinc-800/50 hover:bg-zinc-800 rounded-md"
                 >
-                  {isMinimized ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+                  {isMinimized ? <Maximize2 className="w-5 h-5" /> : <Minimize2 className="w-5 h-5" />}
                 </button>
                 <button 
                   onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
-                  className="text-zinc-500 hover:text-red-400 transition-colors"
+                  className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors bg-zinc-800/50 hover:bg-zinc-800 rounded-md"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>

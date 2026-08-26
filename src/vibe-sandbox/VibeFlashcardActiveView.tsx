@@ -1,4 +1,5 @@
 import { safeFetch } from "../utils/safeFetch";
+import { PromptForgeOverlay } from './PromptForgeOverlay';
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -140,6 +141,7 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
   const [newGlobalTitle, setNewGlobalTitle] = useState("");
   const [newGlobalPrompt, setNewGlobalPrompt] = useState("");
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+  const [isForgeOpen, setIsForgeOpen] = useState(false);
 
   const fetchGlobalPrompts = async () => {
     try {
@@ -1166,8 +1168,11 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
                   <div className="flex justify-between items-center gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={handleGeneratePrompt}
-                      disabled={!newGlobalTitle.trim() || isGeneratingPrompt}
+                      onClick={() => {
+                        if (!newGlobalTitle.trim()) { toast.error("Vui lòng nhập Tên nhãn trước"); return; }
+                        setIsForgeOpen(true);
+                      }}
+                      disabled={!newGlobalTitle.trim()}
                       className="px-3 py-1.5 text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/40 dark:hover:bg-purple-900/60 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
@@ -1493,5 +1498,16 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
         setIsMiniPomodoro={setIsMiniPomodoro}
       />
 
-    </div>
+    
+      <PromptForgeOverlay 
+        isOpen={isForgeOpen} 
+        onClose={() => setIsForgeOpen(false)} 
+        initialTitle={newGlobalTitle} 
+        initialRawPrompt={newGlobalPrompt} 
+        onApply={(finalPrompt) => {
+           setNewGlobalPrompt(finalPrompt);
+           setIsForgeOpen(false);
+        }}
+      />
+</div>
   );});

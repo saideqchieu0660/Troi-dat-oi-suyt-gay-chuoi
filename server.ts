@@ -1240,7 +1240,10 @@ async function _executeGenerateContentRoundRobinInternal(contents: any, config: 
         } catch (err: any) {
           const errMsg = (err?.message || "").toLowerCase();
           let isRateLimit = false;
-          if (errMsg.includes("429") || errMsg.includes("too many") || errMsg.includes("503") || errMsg.includes("500") || errMsg.includes("504") || errMsg.includes("rate limit")) {
+          if (errMsg.includes("401") || errMsg.includes("403") || errMsg.includes("unauthorized") || errMsg.includes("invalid api key")) {
+             console.warn("[groq] API Key invalid/unauthorized. Triggering 1-hour cooldown for Groq.");
+             providerCooldowns.groq = Date.now() + 3600000;
+          } else if (errMsg.includes("429") || errMsg.includes("too many") || errMsg.includes("503") || errMsg.includes("500") || errMsg.includes("504") || errMsg.includes("rate limit")) {
              console.warn("[groq] Rate limit/Overload detected. Triggering 1-minute cooldown.");
              providerCooldowns.groq = Date.now() + COOLDOWN_MS;
              isRateLimit = true;
@@ -2591,7 +2594,23 @@ ${reminderSuffix}`;
       }
 
       let updatedCount = 0;
-      const batch = db.batch();
+  
+    // Helper to recursively remove undefined values
+    const removeUndefined = (obj: any): any => {
+      if (Array.isArray(obj)) return obj.map(removeUndefined);
+      if (obj !== null && typeof obj === 'object') {
+        const newObj: any = {};
+        for (const key in obj) {
+          if (obj[key] !== undefined) {
+            newObj[key] = removeUndefined(obj[key]);
+          }
+        }
+        return newObj;
+      }
+      return obj;
+    };
+
+    const batch = db.batch();
 
       usersSnapshot.forEach((doc) => {
         const uData = doc.data();
@@ -2695,7 +2714,23 @@ ${reminderSuffix}`;
       
       const snap = await db.collection("vibe_api_keys_pool").get();
       if (snap.empty) {
-        const batch = db.batch();
+    
+    // Helper to recursively remove undefined values
+    const removeUndefined = (obj: any): any => {
+      if (Array.isArray(obj)) return obj.map(removeUndefined);
+      if (obj !== null && typeof obj === 'object') {
+        const newObj: any = {};
+        for (const key in obj) {
+          if (obj[key] !== undefined) {
+            newObj[key] = removeUndefined(obj[key]);
+          }
+        }
+        return newObj;
+      }
+      return obj;
+    };
+
+    const batch = db.batch();
         uniqueKeys.forEach((key, i) => {
           const id = `gemini_${i}`;
           batch.set(db.collection("vibe_api_keys_pool").doc(id), { id, status: "GREEN", recoveryTime: null, usageCount: 0 });
@@ -3387,7 +3422,23 @@ ${reminderSuffix}`;
       let deletedCount = 0;
       for (let i = 0; i < uidsToDeleteFromFirestore.length; i += batchSize) {
         const chunk = uidsToDeleteFromFirestore.slice(i, i + batchSize);
-        const batch = db.batch();
+    
+    // Helper to recursively remove undefined values
+    const removeUndefined = (obj: any): any => {
+      if (Array.isArray(obj)) return obj.map(removeUndefined);
+      if (obj !== null && typeof obj === 'object') {
+        const newObj: any = {};
+        for (const key in obj) {
+          if (obj[key] !== undefined) {
+            newObj[key] = removeUndefined(obj[key]);
+          }
+        }
+        return newObj;
+      }
+      return obj;
+    };
+
+    const batch = db.batch();
         for (const uid of chunk) {
           const userDocRef = db.collection("users").doc(uid);
           batch.delete(userDocRef);
@@ -4210,19 +4261,39 @@ ${jsonText}`;
 
   app.post("/api/vibe/generate-prompt", express.json(), async (req, res, next) => {
     try {
-      const { description } = req.body;
-      if (!description) return res.status(400).json({ error: "Missing description" });
+      const { title, rawPrompt, history = [], newMessage } = req.body;
+      
+      // Fallback cho logic cũ nếu UI chưa cập nhật gọi kiểu mới
+      const description = req.body.description || title;
+      
+      if (!description && !rawPrompt && !newMessage) return res.status(400).json({ error: "Missing inputs" });
 
-      const systemInstruction = `Bạn là một chuyên gia viết Prompt (Prompt Engineer). 
-Nhiệm vụ của bạn là viết một đoạn hướng dẫn ngắn gọn (system prompt snippet) để chèn vào ngữ cảnh của AI, nhằm định hướng AI trả lời theo một phong cách hoặc yêu cầu cụ thể mà người dùng muốn tạo nhãn.
+      const systemInstruction = `Bạn là một chuyên gia Prompt Engineer thượng thừa. 
+Nhiệm vụ của bạn là tối ưu hóa, cấu trúc lại và viết ra một System Prompt hoàn chỉnh (để cấp cho AI khác) dựa trên mong muốn thô của người dùng.
+- LUÔN TRẢ VỀ TRỰC TIẾP nội dung Prompt. Không cần giải thích thêm, không bọc trong markdown code block (\`\`\`).
+- Nếu người dùng yêu cầu chỉnh sửa (trong lịch sử chat), hãy tinh chỉnh Prompt trước đó theo đúng yêu cầu mới.`;
 
-Ví dụ: 
-- Người dùng nhập: "Giải thích kiểu GenZ"
-- Bạn viết: "Hãy giải thích bằng ngôn ngữ của GenZ, sử dụng các từ lóng (slang) phổ biến, cách nói chuyện hài hước, trẻ trung, nhưng vẫn đảm bảo giữ được ý nghĩa học thuật cốt lõi."
+      let promptText = "";
+      
+      // Khởi tạo ngữ cảnh gốc
+      promptText += `--- THÔNG TIN GỐC TỪ NGƯỜI DÙNG ---\n`;
+      promptText += `Tên/Tiêu đề Nhãn: ${title || "Không có"}\n`;
+      promptText += `Ý tưởng Prompt thô (Raw Prompt): ${rawPrompt || description || "Không có"}\n\n`;
+      
+      if (history.length === 0 && !newMessage) {
+        promptText += `YÊU CẦU: Dựa vào thông tin trên, hãy viết ra một System Prompt thật chuyên nghiệp, rõ ràng, giúp AI hiểu chính xác nó cần đóng vai trò gì và trả lời như thế nào.`;
+      } else {
+        promptText += `--- LỊCH SỬ TINH CHỈNH ---\n`;
+        history.forEach((msg: any) => {
+            promptText += `[${msg.role === 'model' ? 'AI Prompt Đã Tạo' : 'Người Dùng Yêu Cầu Sửa'}]: ${msg.content}\n`;
+        });
+        promptText += `\n--- YÊU CẦU CHỈNH SỬA MỚI NHẤT ---\n`;
+        promptText += `Người dùng: ${newMessage}\n`;
+        promptText += `YÊU CẦU: Hãy áp dụng yêu cầu mới nhất này vào bản Prompt trước đó để tạo ra phiên bản hoàn thiện cuối cùng.`;
+      }
 
-Hãy trả về TRỰC TIẾP đoạn prompt đó, không giải thích, không bọc trong markdown block. Giữ nó ngắn gọn (khoảng 2-4 câu), sắc bén và tập trung vào phong cách/yêu cầu.`;
-
-      const contents = [{ role: "user", parts: [{ text: `Mô tả nhãn/phong cách người dùng muốn tạo: ${description}` }] }];
+      const contents = [{ role: "user", parts: [{ text: promptText }] }];
+      
       const responseText = await executeGenerateContentRoundRobin(contents, Object.assign({}, {
         systemInstruction,
         temperature: 0.7,
@@ -4527,6 +4598,22 @@ app.post("/api/sync/push", express.json({ limit: '10mb' }), async (req, res, nex
       return res.status(503).json({ error: "Firebase Admin not initialized" });
     }
     const db = admin.firestore();
+
+    // Helper to recursively remove undefined values
+    const removeUndefined = (obj: any): any => {
+      if (Array.isArray(obj)) return obj.map(removeUndefined);
+      if (obj !== null && typeof obj === 'object') {
+        const newObj: any = {};
+        for (const key in obj) {
+          if (obj[key] !== undefined) {
+            newObj[key] = removeUndefined(obj[key]);
+          }
+        }
+        return newObj;
+      }
+      return obj;
+    };
+
     const batch = db.batch();
     const svrTime = admin.firestore.FieldValue.serverTimestamp();
     const processedIds: string[] = [];
@@ -4534,7 +4621,11 @@ app.post("/api/sync/push", express.json({ limit: '10mb' }), async (req, res, nex
     // Process up to 100 items per batch to avoid Firestore limits (max 500 per batch)
     const itemsToProcess = requests.slice(0, 100);
 
-    for (const item of itemsToProcess) {
+    for (let item of itemsToProcess) {
+      if (item.payload) {
+        item.payload = removeUndefined(item.payload);
+      }
+
       // Validate owner to prevent modifying other users' data
       if (item.type === "UPSERT_DECK") {
         if (item.payload.ownerId !== userId) continue;

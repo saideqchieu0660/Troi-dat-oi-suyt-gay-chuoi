@@ -153,14 +153,14 @@ export class VibeProgressSyncManager {
         } catch(e){}
       }
       const docRef = doc(db, `users/${userId}/studyProgress/${deckId}`);
-      await setDoc(docRef, {
+      await setDoc(docRef, removeUndefined({
         currentIndex: local.currentIndex,
         sessionCorrectCount: local.sessionCorrectCount,
         sessionMasteryGained: local.sessionMasteryGained,
         sessionTimeSpent: local.sessionTimeSpent,
         history: history,
         updatedAt: local.updatedAt 
-      }, { merge: true });
+      }), { merge: true });
       
       // Clear history to save space
       try {
@@ -185,13 +185,13 @@ export class VibeProgressSyncManager {
 
     try {
       const docRef = doc(db, `users/${userId}/studyProgress/${deckId}`);
-      await setDoc(docRef, {
+      await setDoc(docRef, removeUndefined({
         currentIndex: local.currentIndex,
         sessionCorrectCount: local.sessionCorrectCount,
         sessionMasteryGained: local.sessionMasteryGained,
         sessionTimeSpent: local.sessionTimeSpent,
         updatedAt: local.updatedAt // Push the exact time we modified it locally
-      }, { merge: true });
+      }), { merge: true });
       return true;
     } catch (e) {
       console.error("Failed to push progress", e);

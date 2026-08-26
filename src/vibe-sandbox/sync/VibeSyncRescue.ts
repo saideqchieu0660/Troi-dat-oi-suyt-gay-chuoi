@@ -132,12 +132,12 @@ export async function forceMergeRescue(): Promise<string> {
     
     for (const [dId, deck] of Object.entries(mergedDecks)) {
        const ref = doc(db, "vibe_decks", dId);
-       batch.set(ref, deck, { merge: true });
+       batch.set(ref, removeUndefined(deck), { merge: true });
        batchCount++;
     }
 
     const pRef = doc(db, "users", uid);
-    batch.set(pRef, mergedProfile, { merge: true });
+    batch.set(pRef, removeUndefined(mergedProfile), { merge: true });
     batchCount++;
 
     const deckStatesToBatch: Record<string, Record<string, any>> = {};
@@ -150,7 +150,7 @@ export async function forceMergeRescue(): Promise<string> {
     
     for (const [dId, states] of Object.entries(deckStatesToBatch)) {
        const ref = doc(db, "users", uid, "vibe_deckStates", dId);
-       batch.set(ref, { states, deckId: dId, lastUpdatedAt: Date.now() }, { merge: true });
+       batch.set(ref, removeUndefined({ states, deckId: dId, lastUpdatedAt: Date.now() }), { merge: true });
        batchCount++;
        if (batchCount >= 450) { // Firestore limit là 500
           await batch.commit();
@@ -233,11 +233,11 @@ export async function smartPushDeck(deckId: string): Promise<string> {
 
     // 6. Push to Cloud
     if (Object.keys(mergedCardStates).length > 0) {
-        await setDoc(deckStateRef, {
+        await setDoc(deckStateRef, removeUndefined({
             states: mergedCardStates,
             deckId: deckId,
             lastUpdatedAt: Date.now()
-        }, { merge: true });
+        }), { merge: true });
     }
 
     // 7. Push session progress

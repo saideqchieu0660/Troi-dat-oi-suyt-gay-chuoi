@@ -1504,7 +1504,7 @@ export const store = {
              easeFactor: card.easeFactor,
              isNewCard: card.isNewCard,
              isWeakCard: card.isHard,
-             lastPointAwarded: card.lastPointAwarded,
+             lastPointAwarded: card.lastPointAwarded || 0,
              updatedAt: nowStr
          };
 

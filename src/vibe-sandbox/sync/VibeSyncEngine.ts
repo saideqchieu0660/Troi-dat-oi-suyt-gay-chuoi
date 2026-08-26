@@ -582,7 +582,7 @@ class SyncEngineClass {
          interval: statePayload.interval,
          easeFactor: statePayload.easeFactor,
          nextReviewDate: statePayload.nextReviewDate,
-         lastPointAwarded: statePayload.lastPointAwarded,
+         lastPointAwarded: statePayload.lastPointAwarded || 0,
          updatedAt: timestamp
       };
       await CardStateManager.updateCardState(uid, cardId, patch);

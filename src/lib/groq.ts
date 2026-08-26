@@ -1,6 +1,6 @@
 export const GROQ_MODELS = {
-  PRIMARY: "llama3-8b-8192",
-  FALLBACK: "mixtral-8x7b-32768"
+  PRIMARY: "llama-3.1-8b-instant",
+  FALLBACK: "llama-3.3-70b-versatile"
 };
 
 interface GroqConfig {
@@ -56,7 +56,13 @@ export async function executeGroqRequest(promptText: string, config: GroqConfig 
     try {
        return await makeRequest(GROQ_MODELS.PRIMARY);
     } catch (err: any) {
+
        console.warn(`[groq] Primary model ${GROQ_MODELS.PRIMARY} failed (Attempt ${attempt}/${MAX_RETRIES}):`, err.message);
+       
+       if (err.message.includes('401') || err.message.includes('403')) {
+           throw new Error(`Groq Key Invalid/Unauthorized (401/403): ${err.message}`);
+       }
+
        
        const isRateLimitOrServerError = err.message.includes('429') || err.message.includes('503') || err.message.includes('500');
        

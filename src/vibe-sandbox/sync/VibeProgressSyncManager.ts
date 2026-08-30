@@ -1,3 +1,4 @@
+import { removeUndefined } from "./VibeSyncRescue";
 import { db } from "../../lib/firebase";
 import { doc, getDoc, setDoc, collection, getDocs, writeBatch, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 

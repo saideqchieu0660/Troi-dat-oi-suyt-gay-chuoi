@@ -2596,7 +2596,7 @@ ${reminderSuffix}`;
       let updatedCount = 0;
   
     // Helper to recursively remove undefined values
-    const removeUndefined = (obj: any): any => {
+    function removeUndefined(obj: any): any {
       if (Array.isArray(obj)) return obj.map(removeUndefined);
       if (obj !== null && typeof obj === 'object') {
         const newObj: any = {};
@@ -2716,7 +2716,7 @@ ${reminderSuffix}`;
       if (snap.empty) {
     
     // Helper to recursively remove undefined values
-    const removeUndefined = (obj: any): any => {
+    function removeUndefined(obj: any): any {
       if (Array.isArray(obj)) return obj.map(removeUndefined);
       if (obj !== null && typeof obj === 'object') {
         const newObj: any = {};
@@ -3424,7 +3424,7 @@ ${reminderSuffix}`;
         const chunk = uidsToDeleteFromFirestore.slice(i, i + batchSize);
     
     // Helper to recursively remove undefined values
-    const removeUndefined = (obj: any): any => {
+    function removeUndefined(obj: any): any {
       if (Array.isArray(obj)) return obj.map(removeUndefined);
       if (obj !== null && typeof obj === 'object') {
         const newObj: any = {};
@@ -4599,7 +4599,7 @@ app.post("/api/sync/push", express.json({ limit: '10mb' }), async (req, res, nex
     const db = admin.firestore();
 
     // Helper to recursively remove undefined values
-    const removeUndefined = (obj: any): any => {
+    function removeUndefined(obj: any): any {
       if (Array.isArray(obj)) return obj.map(removeUndefined);
       if (obj !== null && typeof obj === 'object') {
         const newObj: any = {};

@@ -1,3 +1,18 @@
+
+export function removeUndefined(obj: any): any {
+  if (Array.isArray(obj)) return obj.map(removeUndefined);
+  if (obj !== null && typeof obj === 'object') {
+    const newObj: any = {};
+    for (const key in obj) {
+      if (obj[key] !== undefined) {
+        newObj[key] = removeUndefined(obj[key]);
+      }
+    }
+    return newObj;
+  }
+  return obj;
+};
+
 import { get, set, keys } from "idb-keyval";
 import { db } from "../../lib/firebase";
 import { collection, doc, getDocs, getDoc, writeBatch, query, where } from "firebase/firestore";

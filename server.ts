@@ -2821,7 +2821,7 @@ ${reminderSuffix}`;
       const cached = myCache.get(cacheKey);
       if (cached) return res.json(cached);
 
-      let q = db.collection('vibe_decks').where('ownerId', '==', userId);
+      let q = db.collection('vibe_decks'); // GLOBAL POOL VIBE
       const snapshot = await q.get();
       const data = [];
       snapshot.forEach(doc => {
@@ -4476,7 +4476,6 @@ app.get("/api/sync", async (req, res, next) => {
 
     // 2. Fetch Decks
     const decksSnap = await db.collection("vibe_decks")
-      .where("ownerId", "==", userId)
       .where("lastUpdatedAt", ">=", sinceTimestamp)
       .get();
     decksSnap.forEach(doc => {
@@ -4628,11 +4627,11 @@ app.post("/api/sync/push", express.json({ limit: '10mb' }), async (req, res, nex
 
       // Validate owner to prevent modifying other users' data
       if (item.type === "UPSERT_DECK") {
-        if (item.payload.ownerId !== userId) continue;
+        // if (item.payload.ownerId !== userId) continue; // GLOBAL POOL VIBE
         const deckRef = db.collection("vibe_decks").doc(item.payload.id);
         batch.set(deckRef, { ...item.payload, lastUpdatedAt: svrTime }, { merge: true });
       } else if (item.type === "UPDATE_DECK_FIELD") {
-        if (item.payload.ownerId !== userId) continue;
+        // if (item.payload.ownerId !== userId) continue; // GLOBAL POOL VIBE
         const deckRef = db.collection("vibe_decks").doc(item.payload.id);
         batch.update(deckRef, { ...item.payload.updates, lastUpdatedAt: svrTime });
       } else if (item.type === "DELETE_DECK") {

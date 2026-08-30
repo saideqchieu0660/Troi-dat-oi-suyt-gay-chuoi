@@ -35,7 +35,7 @@ export async function forceMergeRescue(): Promise<string> {
     log.push("Đang tải dữ liệu từ Cloud (Firestore)...");
     const { limit } = await import("firebase/firestore");
     const cloudDecks: Record<string, any> = {};
-    const qDecks = query(collection(db, "vibe_decks"), where("ownerId", "==", uid), limit(500));
+    const qDecks = query(collection(db, "vibe_decks"), limit(1000));
     console.log("[FIRESTORE READ] VibeSyncRescue.ts: getDocs on vibe_decks");
     const cloudDecksSnap = await getDocs(qDecks);
     cloudDecksSnap.forEach(d => {

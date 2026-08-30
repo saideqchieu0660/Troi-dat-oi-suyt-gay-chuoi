@@ -363,7 +363,7 @@ class SyncEngineClass {
     
     try {
       // Pull Decks
-      const q = query(collection(db, "vibe_decks"), where("ownerId", "==", uid));
+      const q = collection(db, "vibe_decks");
       const snap = await getDocs(q);
       const remoteDecks: Deck[] = [];
       snap.forEach(d => remoteDecks.push({ id: d.id, ...d.data() } as Deck));

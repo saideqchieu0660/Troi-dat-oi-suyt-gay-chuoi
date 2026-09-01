@@ -123,6 +123,7 @@ export default function TeacherDashboard() {
     setExpandedCategories((prev) => ({ ...prev, [subject]: !prev[subject] }));
   };
 
+  const [hiddenCategories, setHiddenCategories] = useState<string[]>([]);
   const [showMoveBulkModal, setShowMoveBulkModal] = useState(false);
   const [targetMoveCategory, setTargetMoveCategory] = useState("");
   const [isNewCategoryInput, setIsNewCategoryInput] = useState(false);
@@ -508,6 +509,16 @@ export default function TeacherDashboard() {
         const { collection, onSnapshot } = await import("firebase/firestore");
         if (!isMounted) return;
         const { query, where, limit } = await import("firebase/firestore");
+        
+        try {
+          const { doc, getDoc } = await import("firebase/firestore");
+          const hiddenRef = doc(db, "vibe_settings", "dashboard_config");
+          const hiddenSnap = await getDoc(hiddenRef);
+          if (hiddenSnap.exists() && isMounted) {
+            setHiddenCategories(hiddenSnap.data().hiddenCategories || []);
+          }
+        } catch (e) { console.error("Failed to fetch hidden categories", e); }
+
         const qSets = query(collection(db, "sets"), where("createdBy", "==", user?.id), limit(100));
         
         try {
@@ -741,6 +752,32 @@ export default function TeacherDashboard() {
   const decks = localDecks;
 
   // Compute nested markdown text representation of deck library
+
+
+  const toggleCategoryVisibility = async (subject: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const { db } = await import("../lib/firebase");
+      const { doc, getDoc, setDoc } = await import("firebase/firestore");
+      const hiddenRef = doc(db, "vibe_settings", "dashboard_config");
+      const hiddenSnap = await getDoc(hiddenRef);
+      let currentHidden: string[] = [];
+      if (hiddenSnap.exists()) {
+        currentHidden = hiddenSnap.data().hiddenCategories || [];
+      }
+      const isHidden = currentHidden.includes(subject);
+      if (isHidden) {
+        currentHidden = currentHidden.filter(c => c !== subject);
+      } else {
+        currentHidden.push(subject);
+      }
+      await setDoc(hiddenRef, { hiddenCategories: currentHidden }, { merge: true });
+      setHiddenCategories(currentHidden);
+      toast(isHidden ? `Đã hiện phân mục "${subject}" cho học viên.` : `Đã ẩn phân mục "${subject}" đối với học viên.`);
+    } catch (err: any) {
+      toast("Lỗi khi thay đổi trạng thái phân mục: " + err.message);
+    }
+  };
 
   const handleRenameCategory = async (oldName: string, newName: string) => {
     const trimmedNewName = newName.trim();
@@ -1945,6 +1982,14 @@ export default function TeacherDashboard() {
                                           ({subjectDecks.length} bộ)
                                         </span>
                                       </h4>
+                                      <button
+                                        type="button"
+                                        title={hiddenCategories.includes(subject) ? "Đang ẩn với học viên. Nhấn để hiện." : "Đang hiện với học viên. Nhấn để ẩn."}
+                                        onClick={(e) => toggleCategoryVisibility(subject, e)}
+                                        className={`ml-2 p-1.5 rounded-full transition-colors border-none cursor-pointer flex items-center justify-center ${hiddenCategories.includes(subject) ? 'bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-950 dark:text-red-400' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-400'}`}
+                                      >
+                                        {hiddenCategories.includes(subject) ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                      </button>
                                     </div>
                                   )}
                                 </div>

@@ -7,4 +7,4 @@ content = content.replace('max_tokens: config.maxOutputTokens !== undefined ? co
 
 with open("src/lib/groq.ts", "w") as f:
     f.write(content)
-print("Patched!")
+print("Patched max tokens!")

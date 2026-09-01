@@ -1220,7 +1220,7 @@ async function _executeGenerateContentRoundRobinInternal(contents: any, config: 
           } else {
              console.warn("[gemini] Provider failed, trying fallback...", err?.message);
           }
-          traceLogs.push({ p: "gemini", s: isRateLimit ? "RATE_LIMIT" : "ERROR", m: (err?.message || "").substring(0, 50) });
+          traceLogs.push({ p: "gemini", s: isRateLimit ? "RATE_LIMIT" : "ERROR", m: (err?.message || "").substring(0, 200) });
           if (state) handleGeminiError(state, err);
           finalError = err;
         }
@@ -1250,7 +1250,7 @@ async function _executeGenerateContentRoundRobinInternal(contents: any, config: 
           } else {
              console.warn("[groq] Provider failed, trying fallback...", err?.message);
           }
-          traceLogs.push({ p: "groq", s: isRateLimit ? "RATE_LIMIT" : "ERROR", m: (err?.message || "").substring(0, 50) });
+          traceLogs.push({ p: "groq", s: isRateLimit ? "RATE_LIMIT" : "ERROR", m: (err?.message || "").substring(0, 200) });
           finalError = err;
         }
       }
@@ -2765,6 +2765,7 @@ ${reminderSuffix}`;
     
     try {
       await db.collection("vibe_api_keys_pool").doc(selectedKey.id).update({ usageCount: admin.firestore.FieldValue.increment(1) });
+      selectedKey.usageCount = (selectedKey.usageCount || 0) + 1;
       const h = getSpoofedHeaders();
       const ai = new GoogleGenAI({ 
         apiKey: selectedKey.key,
@@ -2792,11 +2793,14 @@ ${reminderSuffix}`;
       
       if (isYellow) {
         await db.collection("vibe_api_keys_pool").doc(selectedKey.id).update({ status: "YELLOW", recoveryTime: Date.now() + 30000 });
+        selectedKey.status = "YELLOW";
+        selectedKey.recoveryTime = Date.now() + 30000;
         console.warn(`Vibe Rotator: Key ${selectedKey.id} hit YELLOW. Global pause for 30s...`);
         if (!type) await delay(30000); // Do not delay in test mode
         return executeVibeRequest(prompt, type); // Recursive retry
       } else if (isRed) {
         await db.collection("vibe_api_keys_pool").doc(selectedKey.id).update({ status: "RED" });
+        selectedKey.status = "RED";
         console.warn(`Vibe Rotator: Key ${selectedKey.id} hit RED (Banned). Re-routing immediately...`);
         return executeVibeRequest(prompt, type); // Recursive retry immediately
       }
@@ -2821,11 +2825,35 @@ ${reminderSuffix}`;
       const cached = myCache.get(cacheKey);
       if (cached) return res.json(cached);
 
+      // --- LẤY DANH SÁCH CATEGORY BỊ ẨN ---
+      let hiddenCategories: string[] = [];
+      try {
+        const hiddenSnap = await db.collection("vibe_settings").doc("dashboard_config").get();
+        if (hiddenSnap.exists) {
+           hiddenCategories = hiddenSnap.data()?.hiddenCategories || [];
+        }
+      } catch (err) {
+        console.error("Failed to fetch hidden categories", err);
+      }
+
       let q = db.collection('vibe_decks'); // GLOBAL POOL VIBE
       const snapshot = await q.get();
-      const data = [];
+      const data: any[] = [];
       snapshot.forEach(doc => {
          const docData = doc.data();
+         
+         // Lọc các deck có subject bị ẩn
+         let subj = "general";
+         if (docData.subject) {
+             subj = typeof docData.subject === "string" ? docData.subject : JSON.stringify(docData.subject);
+         }
+         subj = subj.trim();
+         
+         // Nếu deck nằm trong category bị ẩn, BỎ QUA KHÔNG TRẢ VỀ API (chỉ ngoại trừ có deckId cụ thể thì có thể trả về)
+         if (!deckId && hiddenCategories.includes(subj)) {
+             return; // Bỏ qua
+         }
+
          if (!deckId || doc.id === deckId) {
             data.push({ id: doc.id, ...docData });
          }

@@ -1,6 +1,6 @@
 export const GROQ_MODELS = {
-  PRIMARY: "llama-3.1-8b-instant",
-  FALLBACK: "llama-3.3-70b-versatile"
+  PRIMARY: "llama3-8b-8192",
+  FALLBACK: "llama3-8b-8192"
 };
 
 interface GroqConfig {
@@ -36,7 +36,7 @@ export async function executeGroqRequest(promptText: string, config: GroqConfig 
         model,
         messages,
         temperature: config.temperature !== undefined ? config.temperature : 0.7,
-        max_tokens: config.maxOutputTokens !== undefined ? config.maxOutputTokens : undefined,
+        max_tokens: config.maxOutputTokens !== undefined ? Math.min(config.maxOutputTokens, 2048) : undefined,
         response_format: isJsonMode ? { type: "json_object" } : undefined
       })
     });

@@ -235,6 +235,7 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
   const [isCopiedExplanation, setIsCopiedExplanation] = useState(false);
   const [isApplyExplanationModalOpen, setIsApplyExplanationModalOpen] = useState(false);
   const [isApplyingExplanation, setIsApplyingExplanation] = useState(false);
+  const [activeTier, setActiveTier] = useState<number | null>(null);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -297,36 +298,61 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
     onAgent3(finalPrompt, useProModel);
   };
 
-  const handleFormatAI = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isFormatting || !currentCard) return;
-    setIsFormatting(true);
+  const handleProgressiveAssist = async (tier: number, prompt: string = "") => {
+    if (activeTier !== null || !currentCard) return;
+    setActiveTier(tier);
     try {
       const { safeRequest } = await import("../utils/apiClient");
-      const res = await safeRequest("/api/automation/format-card", {
+      
+      const res = await safeRequest("/api/vibe/card-progressive-assist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          front: currentCard.front || "",
-          back: currentCard.back || "",
-          example_sentence: currentCard.example_sentence || "",
+          text: currentCard.back || "",
+          tier: tier,
+          customPrompt: prompt
         }),
       });
 
       if (!res.ok) {
-        throw new Error("Không thể kết nối AI định dạng.");
+        throw new Error("Không thể kết nối Progressive API.");
       }
 
       const data = await res.json();
-      setDiffFront(data.formattedFront || currentCard.front || "");
-      setDiffBack(data.formattedBack || currentCard.back || "");
-      setDiffExample(data.formattedExample || currentCard.example_sentence || "");
+      
+      let newBack = "";
+      if (tier === 1) {
+         newBack = `${currentCard.back || ""}
+
+<blockquote class="border-l-4 border-teal-500 bg-teal-50 dark:bg-teal-900/30 p-3 mt-4 rounded-r-lg"><b>🇻🇳 Dịch nghĩa:</b><br/>${data.translation}</blockquote>`;
+      } else if (tier === 2) {
+         newBack = `${data.formatted_content}
+
+<blockquote class="border-l-4 border-teal-500 bg-teal-50 dark:bg-teal-900/30 p-3 mt-4 rounded-r-lg"><b>🇻🇳 Dịch nghĩa:</b><br/>${data.translation}</blockquote>`;
+      } else if (tier === 3) {
+         newBack = `${data.formatted_content}
+
+<hr class="my-4 border-zinc-200 dark:border-zinc-700"/>
+
+<div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800"><b>💡 AI Giải thích:</b><br/><div class="mt-2 text-sm">${data.explanation}</div></div>
+
+<hr class="my-4 border-zinc-200 dark:border-zinc-700"/>
+
+<blockquote class="border-l-4 border-teal-500 bg-teal-50 dark:bg-teal-900/30 p-3 rounded-r-lg"><b>🇻🇳 Dịch nghĩa:</b><br/>${data.translation}</blockquote>`;
+      }
+
+      setDiffFront(currentCard.front || "");
+      setDiffBack(newBack.trim());
+      setDiffExample(currentCard.example_sentence || "");
       setIsFormatDiffModalOpen(true);
+
     } catch (err: any) {
-      console.warn("Format AI Error:", err);
-      alert("Không thể định dạng AI lúc này: " + (err.message || "Lỗi kết nối."));
+      console.warn("Progressive Assist Error:", err);
+      alert("Lỗi AI: " + (err.message || "Lỗi kết nối."));
     } finally {
-      setIsFormatting(false);
+      setActiveTier(null);
+      setShowAiDropdown(false);
+      setIsCustomModalOpen(false);
     }
   };
 
@@ -683,13 +709,13 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
                            <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Chỉnh sửa thẻ học</span>
                            <button
                              type="button"
-                             onClick={handleFormatAI}
-                             disabled={isFormatting}
+                             onClick={(e) => { e.stopPropagation(); handleProgressiveAssist(2); }}
+                             disabled={activeTier !== null || isFormatting}
                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs transition shadow-sm cursor-pointer disabled:opacity-50"
                              title="Tự động xuống dòng, làm thông thoáng thẻ bằng AI"
                            >
                              <Sliders className="w-3.5 h-3.5" />
-                             {isFormatting ? "Đang định dạng..." : "✨ Định dạng AI"}
+                             {activeTier === 2 ? "Đang định dạng..." : "✨ Định dạng AI"}
                            </button>
                          </div>
                          <textarea
@@ -722,8 +748,8 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
                             </button>
                             <button
                               type="button"
-                              onClick={handleFormatAI}
-                              disabled={isFormatting}
+                              onClick={(e) => { e.stopPropagation(); handleProgressiveAssist(2); }}
+                              disabled={activeTier !== null || isFormatting}
                               className="px-4 py-3 bg-purple-100 hover:bg-purple-200 dark:bg-purple-950/40 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 rounded-xl font-bold transition text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                               title="Tự động xuống dòng làm thoáng thẻ bằng AI"
                             >
@@ -811,40 +837,40 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
             {onTranslateDefinition && (
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); onTranslateDefinition(); }}
-                disabled={isTranslatingDefinition || isExtracting || isFormatting}
+                onClick={(e) => { e.stopPropagation(); handleProgressiveAssist(1); }}
+                disabled={activeTier !== null || isExtracting || isFormatting}
                 className="flex items-center gap-1.5 text-xs font-bold text-teal-700 dark:text-teal-300 hover:text-teal-900 dark:hover:text-teal-100 transition disabled:opacity-50 cursor-pointer bg-teal-100 dark:bg-teal-950/60 hover:bg-teal-200 dark:hover:bg-teal-900/80 px-3 py-1.5 rounded-xl border border-teal-300 dark:border-teal-800 shadow-sm"
                 title="Dịch định nghĩa tiếng Anh sang tiếng Việt"
               >
                 <Languages className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                {isTranslatingDefinition ? "Đang dịch..." : "Dịch định nghĩa"}
+                {activeTier === 1 ? "Đang dịch..." : "Dịch định nghĩa"}
               </button>
             )}
 
             <button
               type="button"
-              onClick={handleFormatAI}
-              disabled={isFormatting || isExtracting}
+              onClick={(e) => { e.stopPropagation(); handleProgressiveAssist(2); }}
+              disabled={activeTier !== null || isExtracting || isFormatting}
               className="flex items-center gap-1.5 text-xs font-bold text-purple-700 dark:text-purple-300 hover:text-purple-900 dark:hover:text-purple-100 transition disabled:opacity-50 cursor-pointer bg-purple-100 dark:bg-purple-950/60 hover:bg-purple-200 dark:hover:bg-purple-900/80 px-3 py-1.5 rounded-xl border border-purple-300 dark:border-purple-800 shadow-sm"
               title="Tự động xuống dòng, tách đáp án A B C D & làm thoáng thẻ học bằng AI"
             >
               <Sliders className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-              {isFormatting ? "Đang định dạng..." : "✨ Định dạng AI"}
+              {activeTier === 2 ? "Đang định dạng..." : "✨ Định dạng AI"}
             </button>
 
             <div className="relative" ref={dropdownRef}>
               <button 
                 onClick={(e) => { 
                   e.stopPropagation(); 
-                  if (!isExtracting) {
+                  if (activeTier === null && !isExtracting) {
                     setShowAiDropdown(!showAiDropdown);
                   }
                 }} 
-                disabled={isExtracting} 
+                disabled={activeTier !== null || isExtracting} 
                 className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition disabled:opacity-50 cursor-pointer"
               >
                 <Sparkles className="w-4 h-4"/> 
-                {isExtracting ? "Đang suy nghĩ..." : "Giải thích AI"}
+                {activeTier === 3 ? "Đang xử lý..." : "Giải thích AI"}
               </button>
 
               {/* AI Options Dropdown */}

@@ -35,7 +35,7 @@ export interface VibeFlashcardActiveViewProps {
   onToggleMute: () => void;
   onListen: (e?: React.MouseEvent, text?: string, locale?: string) => void;
   isExtracting: boolean;
-  deepExplanation: string | null;
+  deepExplanation: string | { text: string; cardId: string; originalFront: string; originalBack: string; originalExample?: string } | null;
   onAgent3: (customPromptOverride?: string, useProModel?: boolean) => void;
   onClearExplanation: () => void;
   isClozeMode?: boolean;
@@ -57,7 +57,7 @@ export interface VibeFlashcardActiveViewProps {
   startDeleteCountdown: (e: React.MouseEvent) => void;
   cancelDeleteCountdown: (e: React.MouseEvent) => void;
   detectLanguage: (text: string) => { isAvailable: boolean; locale: "en-US" | "vi-VN" | "" };
-  onSaveFormattedCard?: (newFront: string, newBack: string, newExample?: string) => Promise<void>;
+  onSaveFormattedCard?: (newFront: string, newBack: string, newExample: string | undefined, cardId: string) => Promise<void>;
   onTranslateDefinition?: () => void;
   isTranslatingDefinition?: boolean;
   correctCount?: number;
@@ -229,6 +229,8 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
   const [diffFront, setDiffFront] = useState("");
   const [diffBack, setDiffBack] = useState("");
   const [diffExample, setDiffExample] = useState("");
+  const [diffCardId, setDiffCardId] = useState<string>("");
+  const [diffOriginalCard, setDiffOriginalCard] = useState<Flashcard | null>(null);
   const [isApplyingFormat, setIsApplyingFormat] = useState(false);
 
   // AI Explanation Copy & Diff States
@@ -300,6 +302,7 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
 
   const handleProgressiveAssist = async (tier: number, prompt: string = "") => {
     if (activeTier !== null || !currentCard) return;
+    const requestedCard = currentCard;
     setActiveTier(tier);
     try {
       const { safeRequest } = await import("../utils/apiClient");
@@ -308,7 +311,7 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: currentCard.back || "",
+          text: requestedCard.back || "",
           tier: tier,
           customPrompt: prompt
         }),
@@ -322,7 +325,7 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
       
       let newBack = "";
       if (tier === 1) {
-         newBack = `${currentCard.back || ""}
+         newBack = `${requestedCard.back || ""}
 
 <blockquote class="border-l-4 border-teal-500 bg-teal-50 dark:bg-teal-900/30 p-3 mt-4 rounded-r-lg"><b>🇻🇳 Dịch nghĩa:</b><br/>${data.translation}</blockquote>`;
       } else if (tier === 2) {
@@ -341,9 +344,11 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
 <blockquote class="border-l-4 border-teal-500 bg-teal-50 dark:bg-teal-900/30 p-3 rounded-r-lg"><b>🇻🇳 Dịch nghĩa:</b><br/>${data.translation}</blockquote>`;
       }
 
-      setDiffFront(currentCard.front || "");
+      setDiffFront(requestedCard.front || "");
       setDiffBack(newBack.trim());
-      setDiffExample(currentCard.example_sentence || "");
+      setDiffExample(requestedCard.example_sentence || "");
+      setDiffCardId(requestedCard.id);
+      setDiffOriginalCard(requestedCard);
       setIsFormatDiffModalOpen(true);
 
     } catch (err: any) {
@@ -360,7 +365,7 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
     setIsApplyingFormat(true);
     try {
       if (onSaveFormattedCard) {
-        await onSaveFormattedCard(diffFront, diffBack, diffExample);
+        await onSaveFormattedCard(diffFront, diffBack, diffExample, diffCardId);
       } else {
         setEditFront(diffFront);
         setEditBack(diffBack);
@@ -1260,7 +1265,7 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
           </div>
           
           <div className="markdown-body prose dark:prose-invert max-w-none text-sm break-words whitespace-pre-wrap leading-relaxed text-zinc-800 dark:text-zinc-200">
-             <ReactMarkdown remarkPlugins={[remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>{deepExplanation}</ReactMarkdown>
+             <ReactMarkdown remarkPlugins={[remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>{typeof deepExplanation === 'object' && deepExplanation ? deepExplanation.text : (deepExplanation as string) || ""}</ReactMarkdown>
           </div>
 
           {/* Action Buttons: Copy & Áp dụng vào thẻ */}
@@ -1268,7 +1273,7 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
             <button
               type="button"
               onClick={() => {
-                navigator.clipboard.writeText(deepExplanation);
+                navigator.clipboard.writeText(typeof deepExplanation === 'object' && deepExplanation ? deepExplanation.text : (deepExplanation as string) || "");
                 setIsCopiedExplanation(true);
                 toast.success("Đã sao chép câu trả lời AI!");
                 setTimeout(() => setIsCopiedExplanation(false), 2000);
@@ -1333,7 +1338,6 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
       {/* AI Format Diff Modal (GitHub Style Comparison) */}
       {isFormatDiffModalOpen && (
         <div 
-          onClick={() => setIsFormatDiffModalOpen(false)}
           className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-200"
         >
           <div 
@@ -1373,10 +1377,10 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
             <div className="p-4 sm:p-5 overflow-y-auto space-y-6 flex-1">
               
               {/* FRONT CARD COMPARISON */}
-              <DiffViewer title="🎴 MẶT TRƯỚC THẺ (FRONT)" oldText={currentCard?.front || ""} newText={diffFront} />
+              <DiffViewer title="🎴 MẶT TRƯỚC THẺ (FRONT)" oldText={diffOriginalCard?.front || currentCard?.front || ""} newText={diffFront} />
 
               {/* BACK CARD COMPARISON */}
-              <DiffViewer title="📖 MẶT SAU THẺ (BACK)" oldText={currentCard?.back || ""} newText={diffBack} />
+              <DiffViewer title="📖 MẶT SAU THẺ (BACK)" oldText={diffOriginalCard?.back || currentCard?.back || ""} newText={diffBack} />
 
             </div>
 
@@ -1412,7 +1416,6 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
       {/* AI Explanation Diff Modal (GitHub Style Comparison) */}
       {isApplyExplanationModalOpen && (
         <div 
-          onClick={() => setIsApplyExplanationModalOpen(false)}
           className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-200"
         >
           <div 
@@ -1452,8 +1455,8 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
             <div className="p-4 sm:p-5 overflow-y-auto space-y-6 flex-1">
               <DiffViewer
                 title="📖 MẶT SAU THẺ (BACK)"
-                oldText={currentCard?.back || ""}
-                newText={deepExplanation || ""}
+                oldText={typeof deepExplanation === 'object' && deepExplanation ? deepExplanation.originalBack : currentCard?.back || ""}
+                newText={typeof deepExplanation === 'object' && deepExplanation ? deepExplanation.text : (deepExplanation as string) || ""}
               />
             </div>
 
@@ -1476,16 +1479,22 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
                     if (!deepExplanation) return;
                     setIsApplyingExplanation(true);
                     try {
+                      const textToApply = typeof deepExplanation === 'object' && deepExplanation ? deepExplanation.text : (deepExplanation as string);
+                      const originalFrontToApply = typeof deepExplanation === 'object' && deepExplanation ? deepExplanation.originalFront : (currentCard.front || "");
+                      const originalExampleToApply = typeof deepExplanation === 'object' && deepExplanation ? deepExplanation.originalExample : (currentCard.example_sentence || "");
+                      const targetCardId = typeof deepExplanation === 'object' && deepExplanation ? deepExplanation.cardId : currentCard.id;
+                      
                       if (onSaveFormattedCard) {
                         await onSaveFormattedCard(
-                          currentCard.front || "",
-                          deepExplanation,
-                          currentCard.example_sentence
+                          originalFrontToApply,
+                          textToApply,
+                          originalExampleToApply,
+                          targetCardId
                         );
                       } else {
-                        setEditFront(currentCard.front || "");
-                        setEditBack(deepExplanation);
-                        setEditExampleSentence(currentCard.example_sentence || "");
+                        setEditFront(originalFrontToApply);
+                        setEditBack(textToApply);
+                        setEditExampleSentence(originalExampleToApply);
                         const mockEvt = { stopPropagation: () => {} } as React.MouseEvent;
                         await onSaveEdit(mockEvt);
                       }

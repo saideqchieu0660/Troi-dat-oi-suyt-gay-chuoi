@@ -224,8 +224,12 @@ export class VibeProgressSyncManager {
       cloudData.deckId = deckId;
       this.setLocalProgress(userId, deckId, cloudData);
       return true;
-    } catch (e) {
-      console.error("Failed to pull progress", e);
+    } catch (e: any) {
+      if (e.message && e.message.includes("offline")) {
+        console.warn("Skipped pulling progress: Client is offline");
+      } else {
+        console.error("Failed to pull progress", e);
+      }
       return false;
     }
   }

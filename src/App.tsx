@@ -2068,7 +2068,6 @@ import { updateApiProviderConfig, aiPromptsConfig } from "./utils/apiClient";
 import { nextGenPromptManager } from "./services/next_gen/promptManager";
 import { useQueryClient } from '@tanstack/react-query';
 import { useLeaderboard } from './hooks/useLeaderboard';
-import { useEffect } from "react";
 
 function AppConfigLoader() {
   const queryClient = useQueryClient();

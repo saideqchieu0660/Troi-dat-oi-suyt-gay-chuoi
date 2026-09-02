@@ -31,6 +31,8 @@ import {
   Lock,
   Sparkles,
   Edit2,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { Navigate, Link } from "react-router-dom";
 import { cn } from "../lib/utils";

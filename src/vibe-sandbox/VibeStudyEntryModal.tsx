@@ -74,7 +74,7 @@ export function VibeStudyEntryModal({ isOpen, onClose, deck }: VibeStudyEntryMod
 
   const handleStudyAll = async () => {
     store.setTempDeck(deck as any);
-    navigate(`/study/${deck.id}?mode=weak`);
+    navigate(`/study/${deck.id}`);
     onClose();
   };
 
@@ -141,6 +141,7 @@ export function VibeStudyEntryModal({ isOpen, onClose, deck }: VibeStudyEntryMod
       
       toast.success(`Đã khôi phục trạng thái ${lastBackup.hardCardIds.length} thẻ X! (cập nhật ${updatedCount} thẻ)`);
       setIsConfirmingRestore(false);
+      store.setTempDeck(deck as any);
       onClose();
       navigate(`/study/${deck.id}?mode=weak`);
     } catch (e) {

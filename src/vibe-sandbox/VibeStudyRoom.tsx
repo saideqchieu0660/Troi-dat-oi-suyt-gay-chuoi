@@ -1038,7 +1038,7 @@ export default function VibeStudyRoom() {
     }
   };
 
-  const [deepExplanation, setDeepExplanation] = useState<string | null>(null);
+  const [deepExplanation, setDeepExplanation] = useState<any>(null);
   const [isCopiedExplanation, setIsCopiedExplanation] = useState(false);
   const [isApplyExplanationModalOpen, setIsApplyExplanationModalOpen] = useState(false);
   const [isApplyingExplanation, setIsApplyingExplanation] = useState(false);
@@ -1075,11 +1075,13 @@ export default function VibeStudyRoom() {
 
   // Removed redundant localStorage weak cards sync mechanism
   const queueInitDeckIdRef = useRef<string | null>(null);
+  const queueInitModeRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (deck && isPersonalStatesLoaded) {
-      if (queueInitDeckIdRef.current === deck.id) return; // Prevent overwriting study state on background syncs
+      if (queueInitDeckIdRef.current === deck.id && queueInitModeRef.current === initialMode) return; // Prevent overwriting study state on background syncs
       queueInitDeckIdRef.current = deck.id;
+      queueInitModeRef.current = initialMode;
 
       const weakCards = deck.cards?.filter((c: any) => c.isHard) || [];
       const weakCardIdsList = weakCards.map((c: any) => c.id);
@@ -1232,8 +1234,8 @@ export default function VibeStudyRoom() {
     setCurrentIndex(0);
     setFinished(false);
     setIsFlipped(false);
-    if (!isPinned) setDeepExplanation(null);
-    else setIsMinimized(true);
+    // if (!isPinned) setDeepExplanation(null);
+    // else setIsMinimized(true);
   };
 
   const startReviewAll = () => {
@@ -1243,8 +1245,8 @@ export default function VibeStudyRoom() {
     setCurrentIndex(0);
     setFinished(false);
     setIsFlipped(false);
-    if (!isPinned) setDeepExplanation(null);
-    else setIsMinimized(true);
+    // if (!isPinned) setDeepExplanation(null);
+    // else setIsMinimized(true);
   };
 
   const currentCard = studyQueue[currentIndex];
@@ -1694,8 +1696,8 @@ export default function VibeStudyRoom() {
         }
       }
 
-      if (!isPinned) setDeepExplanation(null);
-      else setIsMinimized(true);
+      // if (!isPinned) setDeepExplanation(null);
+      // else setIsMinimized(true);
 
       setIsFlipped(false);
       if (currentIndex + 1 < studyQueue.length) {
@@ -1720,15 +1722,15 @@ export default function VibeStudyRoom() {
     if (window.confirm("Bạn có muốn quay lại thẻ đầu tiên để học lại từ đầu?")) {
       setCurrentIndex(0);
       setIsFlipped(false);
-      if (!isPinned) setDeepExplanation(null);
-      else setIsMinimized(true);
+      // if (!isPinned) setDeepExplanation(null);
+      // else setIsMinimized(true);
     }
   }, [isPinned]);
 
   const handlePrevCard = useCallback(() => {
     if (currentIndex > 0) {
-      if (!isPinned) setDeepExplanation(null);
-      else setIsMinimized(true);
+      // if (!isPinned) setDeepExplanation(null);
+      // else setIsMinimized(true);
       setIsFlipped(false);
       setCurrentIndex((prev) => prev - 1);
     }
@@ -1736,8 +1738,8 @@ export default function VibeStudyRoom() {
 
   const handleNextCard = useCallback(() => {
     if (currentIndex + 1 < studyQueue.length) {
-      if (!isPinned) setDeepExplanation(null);
-      else setIsMinimized(true);
+      // if (!isPinned) setDeepExplanation(null);
+      // else setIsMinimized(true);
       setIsFlipped(false);
       setCurrentIndex((prev) => prev + 1);
     } else {
@@ -1874,10 +1876,16 @@ export default function VibeStudyRoom() {
         try {
           const text = await res.text();
           data = JSON.parse(text);
-        } catch (e) {
+        } catch (e: any) {
           data = { result: "Server Error: " + (e.message || "Invalid JSON") };
         }
-      setDeepExplanation(data.result);
+      setDeepExplanation({
+        text: data.result,
+        cardId: currentCard.id,
+        originalFront: currentCard.front || "",
+        originalBack: currentCard.back || "",
+        originalExample: currentCard.example_sentence || ""
+      });
     } catch (e: any) {
       setDeepExplanation(
         "Failed to router extract. Check AI connection. Error: " +
@@ -2086,7 +2094,13 @@ export default function VibeStudyRoom() {
         const text = await res2.text();
         data = JSON.parse(text);
       }
-      setDeepExplanation(data.result);
+      setDeepExplanation({
+        text: data.result,
+        cardId: currentCard.id,
+        originalFront: currentCard.front || "",
+        originalBack: currentCard.back || "",
+        originalExample: currentCard.example_sentence || ""
+      });
     } catch (e: any) {
       setDeepExplanation(
         "Failed to agent 3 extract. Check AI connection. Error: " +
@@ -2138,8 +2152,8 @@ export default function VibeStudyRoom() {
 
     // Move to next card
     setIsFlipped(false);
-    if (!isPinned) setDeepExplanation(null);
-    else setIsMinimized(true);
+    // if (!isPinned) setDeepExplanation(null);
+    // else setIsMinimized(true);
 
     if (currentIndex + 1 < studyQueue.length) {
       setCurrentIndex((prev) => prev + 1);
@@ -2255,24 +2269,27 @@ export default function VibeStudyRoom() {
     }
   };
 
-  const handleSaveFormattedCard = async (newFront: string, newBack: string, newExample?: string) => {
-    if (!deck || !currentCard) return;
+  const handleSaveFormattedCard = async (newFront: string, newBack: string, newExample: string | undefined, cardId: string) => {
+    if (!deck) return;
+    const targetCard = studyQueue.find(c => c.id === cardId) || deck.cards?.find((c: any) => c.id === cardId);
+    if (!targetCard) return;
+
     setIsUpdatingCard(true);
     try {
-      const targetDeckId = currentCard.originDeckId || deck.id;
+      const targetDeckId = targetCard.originDeckId || deck.id;
 
       // 1. Update local state immediately for sandbox
       store.updateCard(
         targetDeckId,
-        currentCard.id,
+        targetCard.id,
         newFront,
         newBack,
-        newExample !== undefined ? newExample : (currentCard.example_sentence || ""),
+        newExample !== undefined ? newExample : (targetCard.example_sentence || ""),
       );
       
       setStudyQueue((prevQueue) =>
         prevQueue.map((c) =>
-          c.id === currentCard.id
+          c.id === targetCard.id
             ? {
                 ...c,
                 front: newFront,
@@ -2288,7 +2305,7 @@ export default function VibeStudyRoom() {
         return {
           ...prev,
           cards: prev.cards.map((c: any) =>
-            c.id === currentCard.id
+            c.id === targetCard.id
               ? {
                   ...c,
                   front: newFront,
@@ -2563,8 +2580,8 @@ export default function VibeStudyRoom() {
         setStudyQueue(targetQueue);
         setStudyMode("all");
         setFinished(false);
-        if (!isPinned) setDeepExplanation(null);
-        else setIsMinimized(true);
+        // if (!isPinned) setDeepExplanation(null);
+        // else setIsMinimized(true);
       }
 
       const finalIndex = targetQueue.findIndex((qCard) => qCard.id === card.id);
@@ -3149,8 +3166,8 @@ export default function VibeStudyRoom() {
         deepExplanation={deepExplanation}
         onAgent3={handleAgent3}
         onClearExplanation={() => { 
-           if (!isPinned) setDeepExplanation(null); 
-           else setIsMinimized(true); 
+           // if (!isPinned) setDeepExplanation(null); 
+           // else setIsMinimized(true); 
         }}
         isClozeMode={isClozeMode}
         onToggleClozeMode={() => {

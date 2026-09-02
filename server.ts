@@ -1151,13 +1151,15 @@ async function _executeGenerateContentRoundRobinInternal(contents: any, config: 
 
   let finalError: any = null;
   let traceLogs: any[] = [];
+  const attemptedProviders: string[] = [];
 
   for (const provider of activeProviders) {
+    attemptedProviders.push(provider);
     try {
       if (provider === "gemini") {
+        let state: any;
         try {
           let ai;
-          let state;
           if (config.byokKey) {
              const h = getSpoofedHeaders();
              ai = new GoogleGenAI({
@@ -2233,7 +2235,7 @@ Bạn PHẢI trả về dữ liệu đúng định dạng JSON object, tuyệt �
            responseMimeType: "application/json"
         }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
       } catch (err: any) {
-        const staleData = appCache.getStale(cacheKey);
+        const staleData = appCache.getStale(cacheKey) as any;
         if (staleData) {
            console.warn(`Serving stale progressive assist tier ${tier} due to AI error`);
            return res.json({ ...staleData, stale: true });
@@ -2266,7 +2268,7 @@ Bạn PHẢI trả về dữ liệu đúng định dạng JSON object, tuyệt �
       }
       
       const cacheKey = "translate_" + Buffer.from(text).toString("base64").substring(0, 50);
-      const cachedData = appCache.get(cacheKey);
+      const cachedData = appCache.get(cacheKey) as any;
       if (cachedData) {
          let traceLogs = [{ p: "system", s: "CACHE", m: "Truy xuất kết quả định nghĩa từ bộ nhớ đệm Cache (0đ/Không gọi API)" }];
          const store = asyncLocalStorage.getStore();
@@ -2292,7 +2294,7 @@ ${text}`;
            temperature: 0.3
         }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
       } catch (geminiError: any) {
-        const staleData = appCache.getStale(cacheKey);
+        const staleData = appCache.getStale(cacheKey) as any;
         if (staleData) {
            console.warn("Serving stale translate definition due to AI quota/error");
            return res.json({ translatedText: staleData.translatedText, stale: true });

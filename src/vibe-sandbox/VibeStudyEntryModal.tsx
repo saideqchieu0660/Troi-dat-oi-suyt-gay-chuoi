@@ -1,3 +1,4 @@
+import { CardStateManager } from "../lib/CardStateManager";
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
@@ -73,7 +74,7 @@ export function VibeStudyEntryModal({ isOpen, onClose, deck }: VibeStudyEntryMod
 
   const handleStudyAll = async () => {
     store.setTempDeck(deck as any);
-    navigate(`/study/${deck.id}`);
+    navigate(`/study/${deck.id}?mode=weak`);
     onClose();
   };
 
@@ -106,18 +107,21 @@ export function VibeStudyEntryModal({ isOpen, onClose, deck }: VibeStudyEntryMod
           updatedCount++;
 
           if (currentUser) {
-            // Push qua VibeSyncEngine để đồng bộ server
+            // Cập nhật CardStateManager đồng bộ để Dashboard / Room đọc được ngay
+            await CardStateManager.updateCardState(currentUser.id, card.id, { isHard: shouldBeHard });
+            // Cập nhật server
             await VibeSyncEngine.enqueueChange({
                 type: "UPSERT_CARD_STATE",
                 payload: {
                     uid: currentUser.id,
                     cardId: card.id,
-                    isWeakCard: shouldBeHard
+                    isWeakCard: shouldBeHard,
+                    updatedAt: Date.now()
                 }
             }).catch(err => console.warn("Queue ignored:", err));
             
             if (!(globalThis as any)._vibeCardStateUpdates) (globalThis as any)._vibeCardStateUpdates = [];
-            (globalThis as any)._vibeCardStateUpdates.push({ cardId: card.id, isWeakCard: shouldBeHard });
+            (globalThis as any)._vibeCardStateUpdates.push({ cardId: card.id, isWeakCard: shouldBeHard, updatedAt: Date.now() });
           }
         }
       }
@@ -138,7 +142,7 @@ export function VibeStudyEntryModal({ isOpen, onClose, deck }: VibeStudyEntryMod
       toast.success(`Đã khôi phục trạng thái ${lastBackup.hardCardIds.length} thẻ X! (cập nhật ${updatedCount} thẻ)`);
       setIsConfirmingRestore(false);
       onClose();
-      navigate(`/study/${deck.id}`);
+      navigate(`/study/${deck.id}?mode=weak`);
     } catch (e) {
       console.error(e);
       toast.error("Không thể khôi phục backup");

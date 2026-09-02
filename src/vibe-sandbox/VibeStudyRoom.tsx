@@ -207,26 +207,9 @@ export default function VibeStudyRoom() {
   const [isLoading, setIsLoading] = useState(true);
   const [rawDeck, setRawDeck] = useState<any>(() => store.getDeck(deckId));
   const [personalCardStates, setPersonalCardStates] = useState<any[]>([]);
+  const [isPersonalStatesLoaded, setIsPersonalStatesLoaded] = useState(false);
 
   useEffect(() => {
-    const handleLocalStateUpdate = (e: any) => {
-      if (e.detail && e.detail.states) {
-        setPersonalCardStates(prev => {
-          const next = [...prev];
-          e.detail.states.forEach((s: any) => {
-            const idx = next.findIndex(p => p.id === s.cardId);
-            if (idx >= 0) {
-              next[idx] = { ...next[idx], isWeakCard: s.isWeakCard, updatedAt: Date.now() };
-            } else {
-              next.push({ id: s.cardId, isWeakCard: s.isWeakCard, updatedAt: Date.now() });
-            }
-          });
-          return next;
-        });
-      }
-    };
-    window.addEventListener("vibe-card-states-updated", handleLocalStateUpdate);
-    
     const handleBackupRestored = () => {
       setSessionHistory([]);
       setSessionMasteryGained(0);
@@ -235,7 +218,6 @@ export default function VibeStudyRoom() {
     window.addEventListener("vibe-backup-restored", handleBackupRestored);
 
     return () => {
-      window.removeEventListener("vibe-card-states-updated", handleLocalStateUpdate);
       window.removeEventListener("vibe-backup-restored", handleBackupRestored);
     };
   }, []);
@@ -534,7 +516,7 @@ export default function VibeStudyRoom() {
 
   // 2. Load personal card states ONCE to save reads instead of real-time onSnapshot
   useEffect(() => {
-    if (!user) return;
+    if (!user) { setIsPersonalStatesLoaded(true); return; }
     let isMounted = true;
     let unsubAuthStates: any = null;
 
@@ -552,9 +534,11 @@ export default function VibeStudyRoom() {
           
           if (isMounted) {
             setPersonalCardStates(states);
+            setIsPersonalStatesLoaded(true);
           }
         } catch (e) {
           console.error("Failed to fetch study room card states:", e);
+          if (isMounted) setIsPersonalStatesLoaded(true);
         }
       });
     });
@@ -1093,7 +1077,7 @@ export default function VibeStudyRoom() {
   const queueInitDeckIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (deck) {
+    if (deck && isPersonalStatesLoaded) {
       if (queueInitDeckIdRef.current === deck.id) return; // Prevent overwriting study state on background syncs
       queueInitDeckIdRef.current = deck.id;
 
@@ -1654,7 +1638,7 @@ export default function VibeStudyRoom() {
             window.dispatchEvent(
               new CustomEvent("vibe-card-states-updated", {
                 detail: {
-                  states: [{ cardId: currentCard.id, isWeakCard: !remembered }],
+                  states: [{ cardId: currentCard.id, isWeakCard: !remembered, updatedAt: Date.now() }],
                 },
               })
             );
@@ -1663,6 +1647,7 @@ export default function VibeStudyRoom() {
         
         // Update local object to reflect new mastery for subsequent reviews in the same session
         currentCard.mastery = oldMastery + diff;
+        currentCard.isHard = !remembered;
         
         setSessionMasteryGained((prev) => prev + diff);
 

@@ -1,3 +1,4 @@
+import { CardStateManager } from "../lib/CardStateManager";
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
@@ -93,18 +94,21 @@ export function VibeBackupRestoreX({ deckId, deckTitle, cards, onRestored, class
             // Cập nhật memory store để đồng bộ trạng thái thẻ
             const statePayload = { isWeakCard: shouldBeHard };
             
-            // Push qua VibeSyncEngine để đồng bộ server
+            // Cập nhật CardStateManager đồng bộ để Dashboard / Room đọc được ngay
+            await CardStateManager.updateCardState(currentUser.id, card.id, { isHard: shouldBeHard });
+            // Cập nhật server
             await VibeSyncEngine.enqueueChange({
                 type: "UPSERT_CARD_STATE",
                 payload: {
                     uid: currentUser.id,
                     cardId: card.id,
-                    isWeakCard: shouldBeHard
+                    isWeakCard: shouldBeHard,
+                    updatedAt: Date.now()
                 }
             }).catch(err => console.warn("Queue ignored:", err));
             
             if (!globalThis._vibeCardStateUpdates) globalThis._vibeCardStateUpdates = [];
-            globalThis._vibeCardStateUpdates.push({ cardId: card.id, isWeakCard: shouldBeHard });
+            globalThis._vibeCardStateUpdates.push({ cardId: card.id, isWeakCard: shouldBeHard, updatedAt: Date.now() });
           }
         }
       }

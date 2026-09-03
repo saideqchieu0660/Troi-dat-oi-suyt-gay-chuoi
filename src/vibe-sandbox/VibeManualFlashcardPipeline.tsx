@@ -7,6 +7,8 @@ import { CustomDeckSelect } from "../components/CustomDeckSelect";
 import { cn } from "../lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { safeRequest } from "../utils/apiClient";
+import { db } from "../lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
 
 export function VibeManualFlashcardPipeline() {
   const [inputType, setInputType] = useState<"manual" | "json">("manual");
@@ -195,6 +197,20 @@ export function VibeManualFlashcardPipeline() {
           }))
         };
         await store.addDeck(newDeck);
+        
+        try {
+          const currentUser = store.getCurrentUser();
+          await setDoc(doc(db, "vibe_decks", newDeck.id), {
+            ...newDeck,
+            createdBy: currentUser?.id || "guest",
+            creatorRole: currentUser?.role || "student",
+            creatorName: currentUser?.name || "Người dùng",
+            lastUpdatedAt: Date.now()
+          }, { merge: true });
+        } catch (err) {
+          console.warn("Failed to sync to vibe_decks:", err);
+        }
+
         toast.success(`Đã tạo bộ thẻ mới: ${newDeck.title}`);
       } else {
         const allDecks = store.getDecks();
@@ -215,6 +231,16 @@ export function VibeManualFlashcardPipeline() {
         
         allDecks[deckIndex].cards.push(...newFlashcards);
         store.setDecksLocally(allDecks);
+
+        try {
+          await setDoc(doc(db, "vibe_decks", selectedDeckId), {
+            ...allDecks[deckIndex],
+            lastUpdatedAt: Date.now()
+          }, { merge: true });
+        } catch (err) {
+          console.warn("Failed to sync to vibe_decks:", err);
+        }
+
         toast.success(`Đã thêm ${newFlashcards.length} thẻ vào bộ thẻ hiện tại.`);
       }
       

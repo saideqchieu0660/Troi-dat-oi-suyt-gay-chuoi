@@ -1051,7 +1051,14 @@ export default function VibeStudyRoom() {
 
   useEffect(() => {
     if (deck && isPersonalStatesLoaded) {
-      if (queueInitDeckIdRef.current === deck.id && queueInitModeRef.current === initialMode) return; // Prevent overwriting study state on background syncs
+      // Prevent overwriting study state on background syncs, UNLESS the queue was stuck empty but the deck now has cards
+      if (queueInitDeckIdRef.current === deck.id && queueInitModeRef.current === initialMode) {
+        if (studyQueue.length === 0 && deck.cards && deck.cards.length > 0) {
+          // Allow re-initialization to recover from empty start
+        } else {
+          return;
+        }
+      }
       queueInitDeckIdRef.current = deck.id;
       queueInitModeRef.current = initialMode;
 
@@ -1152,7 +1159,7 @@ export default function VibeStudyRoom() {
         window.removeEventListener("vibe-progress-synced", handleProgressSynced);
       };
     }
-  }, [deck?.id, user?.id, initialMode]);
+  }, [deck?.id, deck?.cards?.length, user?.id, initialMode, studyQueue.length, isPersonalStatesLoaded]);
 
   useEffect(() => {
     if (deck && currentIndex !== undefined && currentIndex >= 0) {

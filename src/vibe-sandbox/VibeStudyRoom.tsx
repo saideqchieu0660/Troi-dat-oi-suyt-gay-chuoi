@@ -8,12 +8,12 @@ import React, {
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { store, Flashcard, Deck } from "../lib/store";
 import { CardStateManager } from "../lib/CardStateManager";
+import { VibeSyncEngine } from "./sync/VibeSyncEngine";
 import localforage from "localforage";
 import {
-  getOfflineDeck,
+  
   saveDeckOffline,
   deleteOfflineDeck,
-  isDeckSavedOffline,
 } from "../utils/offlineDb";
 import {
   Check,
@@ -223,7 +223,6 @@ export default function VibeStudyRoom() {
   }, []);
 
   const [accessDenied, setAccessDenied] = useState(false);
-  const [isOfflineSaved, setIsOfflineSaved] = useState(false);
 
   // Quick Notes Scratchpad states
   const [scratchpadText, setScratchpadText] = useState("");
@@ -259,7 +258,6 @@ export default function VibeStudyRoom() {
     }
 
     // Check offline saved state and load immediately if offline
-    isDeckSavedOffline(deckId).then(setIsOfflineSaved);
 
     if (!navigator.onLine) {
       if (deckId === "daily-quest") {
@@ -289,12 +287,11 @@ export default function VibeStudyRoom() {
           setIsLoading(false);
         });
       } else {
-        getOfflineDeck(deckId).then((offlineDeck) => {
+        VibeSyncEngine.getDeck(deckId).then((offlineDeck) => {
           if (offlineDeck) {
             console.log("Loaded offline deck from DB:", offlineDeck);
             setRawDeck(offlineDeck);
             store.setTempDeck(offlineDeck);
-            setIsOfflineSaved(true);
           } else if (initialDeck) {
             setRawDeck(initialDeck);
           }
@@ -433,7 +430,7 @@ export default function VibeStudyRoom() {
           try {
             console.log("[FIRESTORE READ] VibeStudyRoom.tsx: onSnapshot on sets doc");
             const unsub = onSnapshot(
-              doc(db, "sets", deckId),
+              doc(db, "vibe_decks", deckId),
               (docSnap) => {
                 if (docSnap.exists()) {
                   const fetchedData = docSnap.data();
@@ -443,11 +440,10 @@ export default function VibeStudyRoom() {
                   store.setTempDeck(fetchedData);
                 } else {
                   // Fallback to IndexedDB / local store if document does not exist
-                  getOfflineDeck(deckId).then((offlineDeck) => {
+                  VibeSyncEngine.getDeck(deckId).then((offlineDeck) => {
                     if (offlineDeck) {
                       setRawDeck(offlineDeck);
                       store.setTempDeck(offlineDeck);
-                      setIsOfflineSaved(true);
                     } else {
                       const localDeck = store.getDeck(deckId);
                       if (localDeck) {
@@ -463,11 +459,10 @@ export default function VibeStudyRoom() {
                   "onSnapshot failed, falling back to local database:",
                   err,
                 );
-                getOfflineDeck(deckId).then((offlineDeck) => {
+                VibeSyncEngine.getDeck(deckId).then((offlineDeck) => {
                   if (offlineDeck) {
                     setRawDeck(offlineDeck);
                     store.setTempDeck(offlineDeck);
-                    setIsOfflineSaved(true);
                   } else {
                     const localDeck = store.getDeck(deckId);
                     if (localDeck) {
@@ -952,7 +947,7 @@ export default function VibeStudyRoom() {
       const { db } = await import("../lib/firebase");
       const { doc, updateDoc } = await import("firebase/firestore");
 
-      const docRef = doc(db, "sets", deck.id);
+      const docRef = doc(db, "vibe_decks", deck.id);
       await updateDoc(docRef, {
         title: deckEditTitle.trim(),
         subject: deckEditSubject.trim() || "general",
@@ -1004,29 +999,6 @@ export default function VibeStudyRoom() {
     a.download = `${deck.title.replace(/\s+/g, "_").toLowerCase()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  useEffect(() => {
-    if (deck && isOfflineSaved) {
-      saveDeckOffline(deck).catch((e) =>
-        console.error("Error backing up updated deck to offline DB:", e),
-      );
-    }
-  }, [deck?.id, deck?.lastUpdatedAt, deck?.cards?.length, isOfflineSaved]);
-
-  const handleToggleOffline = async () => {
-    if (!deck) return;
-    try {
-      if (isOfflineSaved) {
-        await deleteOfflineDeck(deck.id);
-        setIsOfflineSaved(false);
-      } else {
-        await saveDeckOffline(deck);
-        setIsOfflineSaved(true);
-      }
-    } catch (e) {
-      console.error("Error toggling offline storage:", e);
-    }
   };
 
   const handleFlip = () => {
@@ -1265,7 +1237,7 @@ export default function VibeStudyRoom() {
         await import("firebase/firestore");
 
       const targetDeckId = (currentCard as any).originDeckId || deck.id;
-      const docRef = doc(db, "sets", targetDeckId);
+      const docRef = doc(db, "vibe_decks", targetDeckId);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -1421,7 +1393,7 @@ export default function VibeStudyRoom() {
         if (!targetDeckId) throw new Error("Chưa xác định ID nhóm thẻ.");
 
         // Cập nhật Firebase ngay lập tức
-        let docRef = doc(db, "sets", targetDeckId);
+        let docRef = doc(db, "vibe_decks", targetDeckId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const docData = docSnap.data();
@@ -2229,7 +2201,7 @@ export default function VibeStudyRoom() {
           const { doc, getDoc, updateDoc } = await import("firebase/firestore");
           
           let updatedDocCards = [];
-          const docRef = doc(db, "sets", targetDeckId);
+          const docRef = doc(db, "vibe_decks", targetDeckId);
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const data = docSnap.data();
@@ -2323,7 +2295,7 @@ export default function VibeStudyRoom() {
           const { db } = await import("../lib/firebase");
           const { doc, getDoc, updateDoc } = await import("firebase/firestore");
 
-          const docRef = doc(db, "sets", targetDeckId);
+          const docRef = doc(db, "vibe_decks", targetDeckId);
           const docSnap = await getDoc(docRef);
           let updatedDocCards = [];
           if (docSnap.exists()) {
@@ -2433,7 +2405,7 @@ export default function VibeStudyRoom() {
           const { db } = await import("../lib/firebase");
           const { doc, getDoc, updateDoc } = await import("firebase/firestore");
 
-          const docRef = doc(db, "sets", targetDeckId);
+          const docRef = doc(db, "vibe_decks", targetDeckId);
           const docSnap = await getDoc(docRef);
           let updatedDocCards = [];
           if (docSnap.exists()) {
@@ -2485,7 +2457,7 @@ export default function VibeStudyRoom() {
         example_sentence: "",
       };
 
-      await updateDoc(doc(db, "sets", deck.id), {
+      await updateDoc(doc(db, "vibe_decks", deck.id), {
         cards: arrayUnion(newCardObj),
       });
 
@@ -2518,7 +2490,7 @@ export default function VibeStudyRoom() {
         const { db } = await import("../lib/firebase");
         const { doc, getDoc, updateDoc } = await import("firebase/firestore");
 
-        const docRef = doc(db, "sets", targetDeckId);
+        const docRef = doc(db, "vibe_decks", targetDeckId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();

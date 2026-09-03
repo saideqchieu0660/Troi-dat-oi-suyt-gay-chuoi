@@ -1,6 +1,6 @@
 export const GROQ_MODELS = {
-  PRIMARY: "llama-3.1-8b-instant",
-  FALLBACK: "llama-3.1-8b-instant"
+  PRIMARY: "llama3-8b-8192",
+  FALLBACK: "llama3-70b-8192"
 };
 
 interface GroqConfig {

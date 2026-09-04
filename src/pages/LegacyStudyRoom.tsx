@@ -1064,7 +1064,14 @@ export default function LegacyStudyRoom() {
 
   useEffect(() => {
     if (deck) {
-      if (queueInitDeckIdRef.current === deck.id) return; // Prevent overwriting study state on background syncs
+      // Prevent overwriting study state on background syncs, UNLESS the queue was stuck empty but the deck now has cards
+      if (queueInitDeckIdRef.current === deck.id) {
+        if (studyQueue.length === 0 && deck.cards && deck.cards.length > 0) {
+          // Allow re-initialization to recover from empty start
+        } else {
+          return;
+        }
+      }
       queueInitDeckIdRef.current = deck.id;
 
       const storageKey = `weak_cards_${deck.id}`;
@@ -1118,7 +1125,7 @@ export default function LegacyStudyRoom() {
       setSessionTimeSpent(0);
       setSessionHistory([]);
     }
-  }, [deck?.id, user?.id]);
+  }, [deck?.id, deck?.cards?.length, user?.id, studyQueue.length]);
 
   useEffect(() => {
     if (deck && currentIndex !== undefined && currentIndex >= 0) {

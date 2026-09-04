@@ -1,6 +1,6 @@
 export const GROQ_MODELS = {
-  PRIMARY: "llama3-8b-8192",
-  FALLBACK: "llama3-70b-8192"
+  PRIMARY: "openai/gpt-oss-120b",
+  FALLBACK: "openai/gpt-oss-120b"
 };
 
 interface GroqConfig {

@@ -1983,17 +1983,18 @@ export default function LegacyStudyRoom() {
         throw new Error(errData.error || "Failed to query express backend");
       }
 
-      let data;
-        try {
-          const text = await res.text();
-          data = JSON.parse(text);
-        } catch (e) {
-          data = { result: "Server Error: " + (e.message || "Invalid JSON") };
-        }
-      setDeepExplanation(data.result);
+
+        let accumulated = "";
+        setDeepExplanation(accumulated);
+        await import("../utils/stream").then(async ({ processStream }) => {
+            await processStream(res, (chunk) => {
+               accumulated += chunk;
+               setDeepExplanation(accumulated);
+            });
+        });
     } catch (e: any) {
       setDeepExplanation(
-        "Failed to agent 3 extract. Check AI connection. Error: " +
+        "Lỗi kết nối AI: " +
           (e.message || e),
       );
     }

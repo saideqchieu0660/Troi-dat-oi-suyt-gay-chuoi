@@ -196,7 +196,7 @@ export default function VibeStudyRoom() {
   const deckId = rawDeckId ? decodeURIComponent(rawDeckId) : "";
   const handleBack = async (e?: React.MouseEvent) => {
     if (user?.id && deckId) {
-      import("./sync/VibeProgressSyncManager").then(m => m.VibeProgressSyncManager.finishAndSyncSession(user.id, deckId)).catch(() => {});
+      Promise.resolve(VibeProgressSyncManager).then(VibeProgressSyncManager => VibeProgressSyncManager.finishAndSyncSession(user.id, deckId)).catch(() => {});
     }
     if (e) e.preventDefault();
     if (window.history.length > 2) {
@@ -793,7 +793,7 @@ export default function VibeStudyRoom() {
   const [finished, setFinished] = useState(false);
   useEffect(() => {
     if (finished && user?.id && deckId) {
-      import("./sync/VibeProgressSyncManager").then(m => m.VibeProgressSyncManager.finishAndSyncSession(user.id, deckId)).catch(() => {});
+      Promise.resolve(VibeProgressSyncManager).then(VibeProgressSyncManager => VibeProgressSyncManager.finishAndSyncSession(user.id, deckId)).catch(() => {});
     }
   }, [finished, user?.id, deckId]);
 
@@ -2051,8 +2051,25 @@ export default function VibeStudyRoom() {
         if (!res.ok) {
            throw new Error(await res.text());
         }
-        const text = await res.text();
-        data = JSON.parse(text);
+        let accumulated = "";
+        setDeepExplanation({
+          text: accumulated,
+          cardId: currentCard.id,
+          originalFront: currentCard.front || "",
+          originalBack: currentCard.back || "",
+          originalExample: currentCard.example_sentence || ""
+        });
+        await processStream(res, (chunk) => {
+           accumulated += chunk;
+           setDeepExplanation({
+              text: accumulated,
+              cardId: currentCard.id,
+              originalFront: currentCard.front || "",
+              originalBack: currentCard.back || "",
+              originalExample: currentCard.example_sentence || ""
+           });
+        });
+        return; // Success, exit
       } catch (err: any) {
         // Fallback Retry
         toast.error(`Lỗi kết nối AI: ${err.message || err}. Đang xoay vòng API...`, { duration: 4000 });
@@ -2080,16 +2097,25 @@ export default function VibeStudyRoom() {
         if (!res2.ok) {
            throw new Error(await res2.text());
         }
-        const text = await res2.text();
-        data = JSON.parse(text);
+                let accumulated = "";
+        setDeepExplanation({
+          text: accumulated,
+          cardId: currentCard.id,
+          originalFront: currentCard.front || "",
+          originalBack: currentCard.back || "",
+          originalExample: currentCard.example_sentence || ""
+        });
+        await processStream(res2, (chunk) => {
+           accumulated += chunk;
+           setDeepExplanation({
+              text: accumulated,
+              cardId: currentCard.id,
+              originalFront: currentCard.front || "",
+              originalBack: currentCard.back || "",
+              originalExample: currentCard.example_sentence || ""
+           });
+        });
       }
-      setDeepExplanation({
-        text: data.result,
-        cardId: currentCard.id,
-        originalFront: currentCard.front || "",
-        originalBack: currentCard.back || "",
-        originalExample: currentCard.example_sentence || ""
-      });
     } catch (e: any) {
       setDeepExplanation(
         "Failed to agent 3 extract. Check AI connection. Error: " +

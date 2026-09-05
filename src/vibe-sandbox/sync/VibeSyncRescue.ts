@@ -1,3 +1,4 @@
+import { VibeProgressSyncManager } from "./VibeProgressSyncManager";
 
 export function removeUndefined(obj: any): any {
   if (Array.isArray(obj)) return obj.map(removeUndefined);
@@ -195,7 +196,7 @@ export async function smartPushDeck(deckId: string): Promise<string> {
   try {
     const { VibeSyncEngine } = await import("./VibeSyncEngine");
     const { CardStateManager } = await import("../../lib/CardStateManager");
-    const { VibeProgressSyncManager } = await import("./VibeProgressSyncManager");
+    
     const { setDoc } = await import("firebase/firestore");
 
     // 1. Get Deck's card IDs
@@ -336,7 +337,13 @@ export async function smartPullDeck(deckId: string, forceBypassCache: boolean = 
 
     return `Synced ${updateCount} updates.`;
   } catch (error: any) {
+    
+    if (error?.message?.includes("offline") || error?.code === "unavailable" || String(error).includes("offline")) {
+        console.warn("Smart Pull Deck Error: Client is offline. Pull skipped.");
+        return "Skipped (Offline)";
+    }
     console.error("Smart Pull Deck Error", error);
     throw error;
+
   }
 }

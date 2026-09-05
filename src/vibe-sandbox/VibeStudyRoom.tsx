@@ -1,3 +1,4 @@
+import { processStream } from "../utils/stream";
 import React, {
   useState,
   useEffect,
@@ -1389,8 +1390,15 @@ export default function VibeStudyRoom() {
       if (!res.ok) throw new Error("API Exception");
       let data;
         try {
-          const text = await res.text();
-          data = JSON.parse(text);
+          
+        let accumulatedText = "";
+        setDeepExplanation("");
+        await processStream(res, (chunk) => {
+           accumulatedText += chunk;
+           setDeepExplanation(accumulatedText);
+        });
+        data = { result: accumulatedText };
+  
         } catch (e) {
           data = { result: "Server Error: " + (e.message || "Invalid JSON") };
         }
@@ -2035,7 +2043,8 @@ export default function VibeStudyRoom() {
             mode: "flashcard_assist",
             responseMode: "direct",
             responseStyle: "concise",
-            useProModel: useProModel
+            useProModel: useProModel,
+            stream: true
           }),
         });
 
@@ -2064,7 +2073,8 @@ export default function VibeStudyRoom() {
             responseMode: "direct",
             responseStyle: "concise",
             useProModel: useProModel,
-            forcedProvider: "groq"
+            forcedProvider: "groq",
+            stream: true
           }),
         });
         if (!res2.ok) {
@@ -3097,8 +3107,11 @@ export default function VibeStudyRoom() {
 
   if (!currentCard || studyQueue.length === 0)
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-zinc-500">
         <div>No cards in this view.</div>
+        <div className="text-xs max-w-lg break-all">
+          [DEBUG] deckId: {deck?.id}, deck.cards.length: {deck?.cards?.length}, studyQueue.length: {studyQueue.length}, currentIndex: {currentIndex}, initialMode: {initialMode}
+        </div>
         <button
           onClick={startReviewAll}
           className="px-6 py-2 rounded-lg bg-orange-500 text-black font-bold hover:bg-orange-600 transition"
@@ -3145,8 +3158,7 @@ export default function VibeStudyRoom() {
         deepExplanation={deepExplanation}
         onAgent3={handleAgent3}
         onClearExplanation={() => { 
-           // if (!isPinned) setDeepExplanation(null); 
-           // else setIsMinimized(true); 
+           setDeepExplanation(null); 
         }}
         isClozeMode={isClozeMode}
         onToggleClozeMode={() => {

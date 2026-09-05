@@ -1,3 +1,4 @@
+import { processStream } from "../utils/stream";
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Sparkles, Send, Loader2, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -70,29 +71,28 @@ export const PromptForgeOverlay: React.FC<PromptForgeOverlayProps> = ({
           title: initialTitle,
           rawPrompt: initialRawPrompt,
           history,
-          newMessage
+          newMessage,
+          stream: true
         })
       });
       
-      const data = await res.json();
-      if (data.success && data.prompt) {
-        if (currentPrompt) {
-          setPreviousPrompt(currentPrompt);
-        }
-        setCurrentPrompt(data.prompt);
-        
-        if (newMessage) {
-          setHistory(prev => [
-            ...prev, 
-            { role: 'user', content: newMessage }, 
-            { role: 'model', content: data.prompt }
-          ]);
-        } else {
-          setHistory([{ role: 'model', content: data.prompt }]);
-        }
-        setChatInput("");
-      } else {
-        toast.error("Không thể tạo prompt. Vui lòng thử lại.");
+      
+      let accumulatedText = "";
+      if (currentPrompt) {
+         setPreviousPrompt(currentPrompt);
+      }
+      setCurrentPrompt("");
+      
+      await processStream(res, (chunk) => {
+         accumulatedText += chunk;
+         setCurrentPrompt(accumulatedText);
+      });
+      
+      if (newMessage && accumulatedText.trim()) {
+         setHistory(prev => [...prev, {
+            userMessage: newMessage,
+            aiResponse: accumulatedText.trim()
+         }]);
       }
     } catch (error) {
       console.error(error);

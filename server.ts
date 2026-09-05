@@ -1094,6 +1094,147 @@ async function executeGenerateContentRoundRobin(contents: any, config: any = {})
     { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 15000 }
   );
 }
+
+async function executeGenerateStreamRoundRobin(res: any, contents: any, config: any = {}): Promise<void> {
+  const isJsonMode = config.responseMimeType === "application/json";
+  let promptText = "";
+  if (typeof contents === "string") {
+    promptText = contents;
+  } else if (Array.isArray(contents)) {
+    promptText = contents.map((c: any) => {
+       if (c.text) return c.text;
+       if (c.inlineData) return "[Image data attached - Supported on Gemini only]";
+       return JSON.stringify(c);
+    }).join("\n");
+  }
+
+  const forbiddenKeywords = [
+    "hack", "exploit", "bypass", "malware", "virus", "phishing",
+    "nsfw", "porn", "violence", "kill", "murder", "suicide"
+  ];
+  const promptLower = promptText.toLowerCase();
+  for (const keyword of forbiddenKeywords) {
+    if (promptLower.includes(keyword)) {
+      throw new Error(`[Content Safety] Request blocked due to prohibited keyword: ${keyword}.`);
+    }
+  }
+
+  const hasGeminiKey = !!config.byokKey || !!process.env.GEMINI_API_KEY;
+  const hasGroqKey = !!config.groqKey || !!process.env.GROQ_API_KEY;
+
+  const now = Date.now();
+  const hasGemini = hasGeminiKey && (now > providerCooldowns.gemini);
+  const hasGroq = hasGroqKey && (now > providerCooldowns.groq);
+
+  let activeProviders: string[] = [];
+  if (hasGemini && hasGroq) {
+     globalRoundRobinCounter++;
+     if (globalRoundRobinCounter % 2 === 0) {
+        activeProviders = ["gemini", "groq"];
+     } else {
+        activeProviders = ["groq", "gemini"];
+     }
+  } else if (hasGroq) {
+     activeProviders = ["groq"];
+  } else if (hasGemini) {
+     activeProviders = ["gemini"];
+  } else {
+     activeProviders = hasGroqKey ? ["groq", "gemini"] : ["gemini", "groq"];
+  }
+
+  let finalError: any = null;
+  let traceLogs: any[] = [];
+  const attemptedProviders: string[] = [];
+
+  for (const provider of activeProviders) {
+    attemptedProviders.push(provider);
+    try {
+      if (provider === "gemini") {
+        let state: any;
+        let ai;
+        if (config.byokKey) {
+           const h = getSpoofedHeaders();
+           ai = new GoogleGenAI({
+             apiKey: config.byokKey,
+             httpOptions: {
+                headers: {
+                  "User-Agent": h["User-Agent"],
+                  "X-Forwarded-For": h["X-Forwarded-For"]
+                }
+             }
+           });
+        } else {
+           const clientInfo = getGeminiClient();
+           ai = clientInfo.ai;
+           state = clientInfo.state;
+        }
+
+        const resultStream = await ai.models.generateContentStream({
+          model: config.model || "gemini-3.6-flash",
+          contents: promptText,
+          config: {
+            ...(config.systemInstruction ? { systemInstruction: config.systemInstruction } : {}),
+            ...(config.temperature !== undefined ? { temperature: config.temperature } : {}),
+            ...(config.maxOutputTokens !== undefined ? { maxOutputTokens: config.maxOutputTokens } : {}),
+            ...(isJsonMode ? { responseMimeType: "application/json" } : {})
+          }
+        });
+
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+
+        let hasStarted = false;
+        for await (const chunk of resultStream) {
+          if (!hasStarted) {
+             const keyInfo = config.byokKey ? "BYOK_KEY" : (state ? state.maskedKey : "SERVER_KEY");
+             traceLogs.push({ p: "gemini", s: "OK", k: keyInfo });
+             res.write(`data: ${JSON.stringify({ type: "trace", data: traceLogs })}\n\n`);
+             hasStarted = true;
+          }
+          if (chunk.text) {
+             res.write(`data: ${JSON.stringify({ type: "chunk", text: chunk.text })}\n\n`);
+          }
+        }
+        res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+        res.end();
+        return;
+      } else if (provider === "groq") {
+        let state: KeyState | undefined;
+        let groqKey = config.groqKey;
+        if (!groqKey) {
+           const keyInfo = getGroqKey();
+           groqKey = keyInfo.key;
+           state = keyInfo.state;
+        }
+        const text = await executeGroqRequest(promptText, { ...config, groqKey });
+        
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        
+        const keyInfo = config.groqKey ? "BYOK_KEY" : (state ? state.maskedKey : "SERVER_KEY");
+        traceLogs.push({ p: "groq", s: "OK", k: keyInfo });
+        res.write(`data: ${JSON.stringify({ type: "trace", data: traceLogs })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: "chunk", text: text })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+        res.end();
+        return;
+      }
+    } catch (err: any) {
+      console.warn(`[stream] Provider ${provider} failed:`, err.message);
+      if (res.headersSent) {
+         res.write(`data: ${JSON.stringify({ type: "error", error: err.message })}\n\n`);
+         res.end();
+         return;
+      }
+      finalError = err;
+    }
+  }
+
+  throw finalError || new Error("All AI providers failed for streaming.");
+}
+
 async function _executeGenerateContentRoundRobinInternal(contents: any, config: any = {}): Promise<string> {
   const isJsonMode = config.responseMimeType === "application/json";
   
@@ -2229,11 +2370,14 @@ Bạn PHẢI trả về dữ liệu đúng định dạng JSON object, tuyệt �
 
       let responseText = "";
       try {
-        responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, {
-           temperature: 0.3,
-           systemInstruction,
-           responseMimeType: "application/json"
-        }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+        
+      let responseText = "";
+      if (req.body.stream) {
+         return await executeGenerateStreamRoundRobin(res, prompt, Object.assign({}, { temperature: 0.3, systemInstruction, responseMimeType: "application/json" }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+      } else {
+         responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, { temperature: 0.3, systemInstruction, responseMimeType: "application/json" }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+      }
+
       } catch (err: any) {
         const staleData = appCache.getStale(cacheKey) as any;
         if (staleData) {
@@ -2290,9 +2434,14 @@ ${text}`;
 
       let responseText = "";
       try {
-        responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, {
-           temperature: 0.3
-        }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+        
+      let responseText = "";
+      if (req.body.stream) {
+         return await executeGenerateStreamRoundRobin(res, prompt, Object.assign({}, { temperature: 0.3 }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+      } else {
+         responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, { temperature: 0.3 }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+      }
+
       } catch (geminiError: any) {
         const staleData = appCache.getStale(cacheKey) as any;
         if (staleData) {
@@ -2346,10 +2495,14 @@ BẮT BUỘC TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY NHẤT (không bọc markdo
   "formattedExample": "Ví dụ đã được định dạng (nếu có)"
 }`;
 
-      const responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, {
-        responseMimeType: "application/json",
-        temperature: 0.1
-      }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+      
+      let responseText = "";
+      if (req.body.stream) {
+         return await executeGenerateStreamRoundRobin(res, prompt, Object.assign({}, { responseMimeType: "application/json", temperature: 0.1 }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+      } else {
+         responseText = await executeGenerateContentRoundRobin(prompt, Object.assign({}, { responseMimeType: "application/json", temperature: 0.1 }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+      }
+
 
       let parsed = { formattedFront: front, formattedBack: back, formattedExample: example_sentence };
       try {
@@ -2601,13 +2754,25 @@ ${reminderSuffix}`;
         // removed maxTokens override due to early truncation bug
         const aiModelToUse = req.body.useProModel ? "gemini-2.5-pro" : "gemini-3.6-flash";
 
-        responseText = await executeGenerateContentRoundRobin(contents, Object.assign({}, {
-            systemInstruction: systemPrompt,
-            temperature: responseMode === "direct" && responseStyle !== "detailed" ? 0.3 : 0.8,
-            maxOutputTokens: maxTokens,
-            model: aiModelToUse,
-            forcedProvider: req.body.forcedProvider
-        }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+        
+        if (req.body.stream) {
+           return await executeGenerateStreamRoundRobin(res, contents, Object.assign({}, {
+               systemInstruction: systemPrompt,
+               temperature: responseMode === "direct" && responseStyle !== "detailed" ? 0.3 : 0.8,
+               maxOutputTokens: maxTokens,
+               model: aiModelToUse,
+               forcedProvider: req.body.forcedProvider
+           }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+        } else {
+           responseText = await executeGenerateContentRoundRobin(contents, Object.assign({}, {
+               systemInstruction: systemPrompt,
+               temperature: responseMode === "direct" && responseStyle !== "detailed" ? 0.3 : 0.8,
+               maxOutputTokens: maxTokens,
+               model: aiModelToUse,
+               forcedProvider: req.body.forcedProvider
+           }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+        }
+  
       } catch (geminiError: any) {
          throw geminiError;
       }
@@ -4101,7 +4266,14 @@ Trả về dữ liệu dưới dạng JSON chuẩn (không dùng markdown block)
   "wordForm": "Loại từ, phát âm IPA (chỉ áp dụng nếu là tiếng Anh)"
 }`;
 
-      const responseText = await executeGenerateContentRoundRobin(requestPrompt, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] });
+      
+      let responseText = "";
+      if (req.body.stream) {
+         return await executeGenerateStreamRoundRobin(res, requestPrompt, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] });
+      } else {
+         responseText = await executeGenerateContentRoundRobin(requestPrompt, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] });
+      }
+  
 
       let parsedData: any = { definition: (responseText as string).trim(), wordForm: wordForm || "" };
       try {
@@ -4410,11 +4582,22 @@ Nhiệm vụ của bạn là tối ưu hóa, cấu trúc lại và viết ra m�
 
       const contents = [{ role: "user", parts: [{ text: promptText }] }];
       
-      const responseText = await executeGenerateContentRoundRobin(contents, Object.assign({}, {
-        systemInstruction,
-        temperature: 0.7,
-        model: "gemini-3.6-flash"
-      }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+      
+      let responseText = "";
+      if (req.body.stream) {
+         return await executeGenerateStreamRoundRobin(res, contents, Object.assign({}, {
+            systemInstruction,
+            temperature: 0.7,
+            model: "gemini-3.6-flash"
+         }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+      } else {
+         responseText = await executeGenerateContentRoundRobin(contents, Object.assign({}, {
+            systemInstruction,
+            temperature: 0.7,
+            model: "gemini-3.6-flash"
+         }, { byokKey: req?.headers["x-byok-key"] , groqKey: req?.headers["x-groq-key"] }));
+      }
+  
 
       res.json({ success: true, prompt: responseText.trim() });
     } catch (err: any) {

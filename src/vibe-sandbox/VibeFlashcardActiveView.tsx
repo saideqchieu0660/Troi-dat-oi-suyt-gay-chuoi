@@ -1,3 +1,4 @@
+import { processStream, parsePartialJson } from "../utils/stream";
 import { safeFetch } from "../utils/safeFetch";
 import { PromptForgeOverlay } from './PromptForgeOverlay';
 import React, { useState, useRef, useEffect } from 'react';
@@ -313,7 +314,8 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
         body: JSON.stringify({
           text: requestedCard.back || "",
           tier: tier,
-          customPrompt: prompt
+          customPrompt: prompt,
+          stream: true
         }),
       });
 
@@ -321,33 +323,28 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
         throw new Error("Không thể kết nối Progressive API.");
       }
 
-      const data = await res.json();
       
-      let newBack = "";
-      if (tier === 1) {
-         newBack = `${requestedCard.back || ""}
-
-<blockquote class="border-l-4 border-teal-500 bg-teal-50 dark:bg-teal-900/30 p-3 mt-4 rounded-r-lg"><b>🇻🇳 Dịch nghĩa:</b><br/>${data.translation}</blockquote>`;
-      } else if (tier === 2) {
-         newBack = `${data.formatted_content}
-
-<blockquote class="border-l-4 border-teal-500 bg-teal-50 dark:bg-teal-900/30 p-3 mt-4 rounded-r-lg"><b>🇻🇳 Dịch nghĩa:</b><br/>${data.translation}</blockquote>`;
-      } else if (tier === 3) {
-         newBack = `${data.formatted_content}
-
-<hr class="my-4 border-zinc-200 dark:border-zinc-700"/>
-
-<div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800"><b>💡 AI Giải thích:</b><br/><div class="mt-2 text-sm">${data.explanation}</div></div>
-
-<hr class="my-4 border-zinc-200 dark:border-zinc-700"/>
-
-<blockquote class="border-l-4 border-teal-500 bg-teal-50 dark:bg-teal-900/30 p-3 rounded-r-lg"><b>🇻🇳 Dịch nghĩa:</b><br/>${data.translation}</blockquote>`;
-      }
-
+      let accumulatedText = "";
       setDiffFront(requestedCard.front || "");
-      setDiffBack(newBack.trim());
-      setDiffExample(requestedCard.example_sentence || "");
       setDiffCardId(requestedCard.id);
+      
+      await processStream(res, (chunk) => {
+         accumulatedText += chunk;
+         const data = parsePartialJson(accumulatedText);
+         
+         let newBack = "";
+         if (tier === 1) {
+            newBack = `${requestedCard.back || ""}<blockquote class="border-l-4 border-teal-500 bg-teal-50 dark:bg-teal-900/30 p-3 mt-4 rounded-r-lg"><b>🇻🇳 Dịch nghĩa:</b><br/>${data.translation}</blockquote>`;
+         } else if (tier === 2) {
+            newBack = `${data.formatted_content}<blockquote class="border-l-4 border-teal-500 bg-teal-50 dark:bg-teal-900/30 p-3 mt-4 rounded-r-lg"><b>🇻🇳 Dịch nghĩa:</b><br/>${data.translation}</blockquote>`;
+         } else if (tier === 3) {
+            newBack = `${data.formatted_content}<hr class="my-4 border-zinc-200 dark:border-zinc-700"/><div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800"><b>💡 AI Giải thích:</b><br/><div class="mt-2 text-sm">${data.explanation}</div></div><hr class="my-4 border-zinc-200 dark:border-zinc-700"/><blockquote class="border-l-4 border-teal-500 bg-teal-50 dark:bg-teal-900/30 p-3 rounded-r-lg"><b>🇻🇳 Dịch nghĩa:</b><br/>${data.translation}</blockquote>`;
+         }
+         
+         setDiffBack(newBack.trim());
+         setDiffExample(requestedCard.example_sentence || "");
+      });
+
       setDiffOriginalCard(requestedCard);
       setIsFormatDiffModalOpen(true);
 
@@ -1500,6 +1497,7 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
                       }
                       setIsApplyExplanationModalOpen(false);
                       toast.success("Đã áp dụng câu trả lời AI vào mặt sau thẻ!");
+                      onClearExplanation();
                     } catch (err: any) {
                       console.error("Failed to apply AI explanation:", err);
                       toast.error("Lỗi khi áp dụng: " + (err.message || "Không thể cập nhật thẻ"));

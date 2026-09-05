@@ -1,3 +1,4 @@
+import { processStream } from "../utils/stream";
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { store } from "../lib/store";
 import { toast } from "sonner";
@@ -388,13 +389,14 @@ export default function Agent3Widget() {
           "x-user-is-pro": user?.isPro ? "true" : "false"
         },
         signal: controller.signal,
-        body: JSON.stringify({ 
-          message: finalMessage, 
-          history: messages.filter(m => !(m.role === "ai" && m.text.includes("⏳"))), 
-          context, 
-          sessionId, 
-          lengthMode: responseLength,
-          responseMode: responseMode
+        body: JSON.stringify({
+           message: finalMessage,
+           history: messages.filter(m => !(m.role === "ai" && m.text.includes("⏳"))),
+           context,
+           sessionId,
+           lengthMode: responseLength,
+           responseMode: responseMode,
+           stream: true
         })
       });
 
@@ -402,8 +404,18 @@ export default function Agent3Widget() {
         throw new Error("Lỗi kết nối Agent 3");
       }
       
-      const data = await res.json();
-      setMessages(prev => [...prev, { role: "ai", text: data.result }]);
+      
+      let accumulatedText = "";
+      setMessages(prev => [...prev, { role: "ai", text: "" }]);
+      await processStream(res, (chunk) => {
+         accumulatedText += chunk;
+         setMessages(prev => {
+            const newMsgs = [...prev];
+            newMsgs[newMsgs.length - 1].text = accumulatedText;
+            return newMsgs;
+         });
+      });
+  
     } catch (error: any) {
       if (error.name === "AbortError") {
         setIsLoading(false);

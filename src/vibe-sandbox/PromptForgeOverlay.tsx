@@ -90,8 +90,11 @@ export const PromptForgeOverlay: React.FC<PromptForgeOverlayProps> = ({
       
       if (newMessage && accumulatedText.trim()) {
          setHistory(prev => [...prev, {
-            userMessage: newMessage,
-            aiResponse: accumulatedText.trim()
+            role: "user",
+            content: newMessage
+         }, {
+            role: "assistant",
+            content: accumulatedText.trim()
          }]);
       }
     } catch (error) {

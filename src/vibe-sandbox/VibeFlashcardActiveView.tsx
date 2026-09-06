@@ -240,6 +240,9 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
   const [isApplyingExplanation, setIsApplyingExplanation] = useState(false);
   const [activeTier, setActiveTier] = useState<number | null>(null);
 
+  const textToCheckLanguage = `${currentCard?.front || ""} ${currentCard?.back || ""}`;
+  const isVietnameseCard = detectLanguage(textToCheckLanguage).locale === "vi-VN" || /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i.test(textToCheckLanguage);
+
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -315,6 +318,7 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
           text: requestedCard.back || "",
           tier: tier,
           customPrompt: prompt,
+          isVietnameseCard: isVietnameseCard,
           stream: true
         }),
       });
@@ -334,11 +338,11 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
          
          let newBack = "";
          if (tier === 1) {
-            newBack = `${requestedCard.back || ""}<blockquote class="border-l-4 border-teal-500 bg-teal-50 dark:bg-teal-900/30 p-3 mt-4 rounded-r-lg"><b>🇻🇳 Dịch nghĩa:</b><br/>${data.translation}</blockquote>`;
+            newBack = `${requestedCard.back || ""}${data.translation ? `\n\n> **🇻🇳 Dịch nghĩa:**\n> ${data.translation.replace(/\n/g, '\n> ')}` : ""}`;
          } else if (tier === 2) {
-            newBack = `${data.formatted_content}<blockquote class="border-l-4 border-teal-500 bg-teal-50 dark:bg-teal-900/30 p-3 mt-4 rounded-r-lg"><b>🇻🇳 Dịch nghĩa:</b><br/>${data.translation}</blockquote>`;
+            newBack = `${data.formatted_content}${data.translation && !isVietnameseCard ? `\n\n> **🇻🇳 Dịch nghĩa:**\n> ${data.translation.replace(/\n/g, '\n> ')}` : ""}`;
          } else if (tier === 3) {
-            newBack = `${data.formatted_content}<hr class="my-4 border-zinc-200 dark:border-zinc-700"/><div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800"><b>💡 AI Giải thích:</b><br/><div class="mt-2 text-sm">${data.explanation}</div></div><hr class="my-4 border-zinc-200 dark:border-zinc-700"/><blockquote class="border-l-4 border-teal-500 bg-teal-50 dark:bg-teal-900/30 p-3 rounded-r-lg"><b>🇻🇳 Dịch nghĩa:</b><br/>${data.translation}</blockquote>`;
+            newBack = `${data.formatted_content}\n\n---\n\n**💡 AI Giải thích:**\n${data.explanation}${data.translation && !isVietnameseCard ? `\n\n---\n\n> **🇻🇳 Dịch nghĩa:**\n> ${data.translation.replace(/\n/g, '\n> ')}` : ""}`;
          }
          
          setDiffBack(newBack.trim());
@@ -836,7 +840,7 @@ export const VibeFlashcardActiveView: React.FC<VibeFlashcardActiveViewProps> = R
       {!isEditing && (
         <div className="w-full max-w-xl mx-auto mt-4 sm:mt-6 flex justify-end items-center px-4 shrink-0">
           <div className="flex gap-3 sm:gap-4 items-center">
-            {onTranslateDefinition && (
+            {onTranslateDefinition && !isVietnameseCard && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); handleProgressiveAssist(1); }}

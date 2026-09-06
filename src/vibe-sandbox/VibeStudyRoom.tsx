@@ -1853,7 +1853,6 @@ export default function VibeStudyRoom() {
           setDeepExplanation(
             `⏳ **Cooldown 20s**: ${errData.error || "Bạn đang gọi AI quá nhanh. Hãy chờ!"}`,
           );
-          setIsExtracting(false);
           return;
         }
         throw new Error(errData.error || "Failed to query express backend");
@@ -1878,8 +1877,9 @@ export default function VibeStudyRoom() {
         "Failed to router extract. Check AI connection. Error: " +
           (e.message || e),
       );
+    } finally {
+      setIsExtracting(false);
     }
-    setIsExtracting(false);
   };
 
   const handlePrepareCustomPrompt = async (): Promise<{ cardType: string; suggestedPrompt: string }> => {
@@ -2094,10 +2094,12 @@ export default function VibeStudyRoom() {
             stream: true
           }),
         });
+
         if (!res2.ok) {
            throw new Error(await res2.text());
         }
-                let accumulated = "";
+        
+        let accumulated = "";
         setDeepExplanation({
           text: accumulated,
           cardId: currentCard.id,
@@ -2121,8 +2123,9 @@ export default function VibeStudyRoom() {
         "Failed to agent 3 extract. Check AI connection. Error: " +
           (e.message || e),
       );
+    } finally {
+      setIsExtracting(false);
     }
-    setIsExtracting(false);
   };
 
   const handleRemindLater = () => {

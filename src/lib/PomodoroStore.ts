@@ -28,19 +28,19 @@ class PomodoroGlobalStore {
       stats[today].timeSpent += minutes;
       localStorage.setItem('vibe_pomodoro_stats', JSON.stringify(stats));
 
-      const histStr = localStorage.getItem('vibe_pomodoro_history');
+      const histStr = localStorage.getItem('vibe_pomo_history');
       let history = histStr ? JSON.parse(histStr) : [];
       history.push({
         id: Date.now().toString(),
         duration: minutes,
-        timestamp: Date.now(),
+        timestamp: new Date().toISOString(),
         dateStr: new Date().toLocaleDateString('vi-VN'),
         deckTitle: "Phiên Pomodoro"
       });
       if (history.length > 50) history = history.slice(history.length - 50);
-      localStorage.setItem('vibe_pomodoro_history', JSON.stringify(history));
+      localStorage.setItem('vibe_pomo_history', JSON.stringify(history));
 
-      window.dispatchEvent(new Event('vibe_pomodoro_updated'));
+      window.dispatchEvent(new Event('vibe_pomo_updated'));
 
       // Safe Cloud Sync - fire and forget
       if (auth && auth.currentUser) {

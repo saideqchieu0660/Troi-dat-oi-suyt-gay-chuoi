@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'motion/react';
-import { MoreVertical, MoreHorizontal, Play, BookOpen, Search, X, ChevronLeft, ChevronRight, Sparkles, Pin, PinOff, Clock, Check, Share2, Edit3, DownloadCloud, FileJson } from 'lucide-react';
+import { MoreVertical, MoreHorizontal, Play, BookOpen, Search, X, ChevronLeft, ChevronRight, Sparkles, Pin, PinOff, Clock, Check, Share2, Edit3, DownloadCloud, FileJson, EyeOff, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link, useNavigate } from 'react-router-dom';
 import { Deck, store, Flashcard } from '../lib/store';
@@ -351,6 +351,33 @@ const safeSetItem = (key: string, value: string) => {
     } finally {
       setIsSavingCategoryName(false);
       setEditingCategory(null);
+    }
+  };
+
+  const [isTogglingCategoryVisibility, setIsTogglingCategoryVisibility] = useState(false);
+
+  const handleToggleCategoryVisibility = async (subject: string, isCurrentlyHidden: boolean) => {
+    setIsTogglingCategoryVisibility(true);
+    try {
+      const res = await fetch('/api/vibe/admin/toggle-category', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ subject, isHidden: !isCurrentlyHidden })
+      });
+      if (res.ok) {
+        toast.success(`Đã ${!isCurrentlyHidden ? 'ẩn' : 'hiện'} danh mục thành công! Reload trang để thấy thay đổi.`);
+      } else {
+        const err = await res.json();
+        toast.error(`Lỗi: ${err.error}`);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Đã có lỗi xảy ra.');
+    } finally {
+      setIsTogglingCategoryVisibility(false);
+      setShowCategoryMenu(null);
     }
   };
 
@@ -729,6 +756,7 @@ const safeSetItem = (key: string, value: string) => {
                                       />
                                       <div className="absolute right-0 top-full mt-2 w-56 max-w-[90vw] bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-700/80 z-[80] overflow-hidden py-1.5 animate-in fade-in zoom-in-95 duration-150">
                                         {isAdmin && (
+                                          <>
                                           <button
                                             onClick={() => {
                                               setShowCategoryMenu(null);
@@ -740,6 +768,19 @@ const safeSetItem = (key: string, value: string) => {
                                             <Edit3 className="w-4 h-4" />
                                             Đổi tên danh mục
                                           </button>
+                                          
+                                          <button
+                                            onClick={() => {
+                                              const isHidden = subjectDecks.some(d => d.vibe_isHidden);
+                                              handleToggleCategoryVisibility(subject, isHidden);
+                                            }}
+                                            disabled={isTogglingCategoryVisibility}
+                                            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/50 text-red-600 dark:text-red-400 transition-colors"
+                                          >
+                                            {subjectDecks.some(d => d.vibe_isHidden) ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                                            {subjectDecks.some(d => d.vibe_isHidden) ? "Hiển thị danh mục này" : "Ẩn danh mục này"}
+                                          </button>
+                                          </>
                                         )}
                                         <button
                                           onClick={async () => {
@@ -1173,6 +1214,24 @@ const safeSetItem = (key: string, value: string) => {
                       >
                         <Layers className="w-3 h-3 text-black shrink-0" />
                         <span className="hidden sm:inline">Thêm vào Lớp</span>
+                      </button>
+                    )}
+                    {isAdmin && subject !== "📌 ĐÃ GHIM" && (
+                      <button
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          const isHidden = subjectDecks.some(d => d.vibe_isHidden);
+                          handleToggleCategoryVisibility(subject, isHidden);
+                        }}
+                        disabled={isTogglingCategoryVisibility}
+                        className={cn(
+                          "text-[10px] sm:text-xs font-black text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl hover:scale-105 shadow-md flex items-center gap-1.5 shrink-0 transition-colors",
+                          subjectDecks.some(d => d.vibe_isHidden) ? "bg-emerald-500 hover:bg-emerald-600" : "bg-red-500 hover:bg-red-600"
+                        )}
+                        title={subjectDecks.some(d => d.vibe_isHidden) ? "Hiển thị danh mục này" : "Ẩn danh mục này"}
+                      >
+                        {subjectDecks.some(d => d.vibe_isHidden) ? <Eye className="w-3 h-3 text-white shrink-0" /> : <EyeOff className="w-3 h-3 text-white shrink-0" />}
+                        <span className="hidden sm:inline">{subjectDecks.some(d => d.vibe_isHidden) ? "Hiện" : "Ẩn"}</span>
                       </button>
                     )}
                   </>

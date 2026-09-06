@@ -2329,12 +2329,12 @@ KHÔNG sử dụng Markdown code block. TRẢ VỀ ĐÚNG MỘT OBJECT JSON DUY 
   // AI Progressive Assist for Flashcards (Tier 1: Translate, Tier 2: Format, Tier 3: Explain)
   app.post("/api/vibe/card-progressive-assist", aiCooldownMiddleware, async (req, res, next) => {
     try {
-      const { text, tier = 1, customPrompt = "" } = req.body;
+      const { text, tier = 1, customPrompt = "", isVietnameseCard = false } = req.body;
       if (!text) {
         return res.status(400).json({ error: "Không có văn bản đầu vào." });
       }
 
-      const cacheKey = "progressive_" + tier + "_" + Buffer.from(text + customPrompt).toString("base64").substring(0, 50);
+      const cacheKey = "progressive_" + tier + "_" + isVietnameseCard + "_" + Buffer.from(text + customPrompt).toString("base64").substring(0, 50);
       const cachedData = appCache.get(cacheKey);
       if (cachedData) {
          let traceLogs = [{ p: "system", s: "CACHE", m: `Truy xuất progressive assist tier ${tier} từ Cache (0đ)` }];
@@ -2355,15 +2355,13 @@ Bạn PHẢI trả về dữ liệu đúng định dạng JSON object, tuyệt �
 3. Trả về JSON với key "translation" chứa phần dịch.`;
       } else if (tier === 2) {
          systemInstruction += `\nNHIỆM VỤ (TIER 2 - Định dạng & Dịch nghĩa):
-1. ĐỊNH DẠNG (formatted_content): Trình bày lại văn bản gốc cho đẹp mắt (Dùng HTML/Markdown như <b>, <i>, <br>...). Sửa lỗi chính tả, xóa khoảng trắng thừa, trình bày có cấu trúc rõ ràng. Không tự ý cắt xén hay tóm tắt làm mất thông tin gốc.
-2. DỊCH NGHĨA (translation): Dịch phần giải nghĩa sang tiếng Việt mượt mà (giữ nguyên câu ví dụ tiếng Anh nếu có).
-3. Trả về JSON gồm 2 keys: "formatted_content" và "translation".`;
+1. ĐỊNH DẠNG (formatted_content): Trình bày lại văn bản gốc cho đẹp mắt (CHỈ dùng Markdown chuẩn: **, *, -, không dùng HTML hay class). Sửa lỗi chính tả, xóa khoảng trắng thừa, trình bày có cấu trúc rõ ràng. Không tự ý cắt xén hay tóm tắt làm mất thông tin gốc.
+${!isVietnameseCard ? `2. DỊCH NGHĨA (translation): Dịch phần giải nghĩa sang tiếng Việt mượt mà (giữ nguyên câu ví dụ tiếng Anh nếu có).\n3. Trả về JSON gồm 2 keys: "formatted_content" và "translation".` : `2. Trả về JSON với key "formatted_content".`}`;
       } else {
          systemInstruction += `\nNHIỆM VỤ (TIER 3 - Giải thích, Định dạng & Dịch nghĩa):
 1. GIẢI THÍCH (explanation): Giải thích cặn kẽ về từ vựng, ngữ pháp hoặc trả lời câu hỏi.${customPrompt ? `\nLƯU Ý ĐẶC BIỆT TỪ NGƯỜI DÙNG CHO PHẦN GIẢI THÍCH: "${customPrompt}"` : ""}
-2. ĐỊNH DẠNG (formatted_content): Trình bày lại văn bản gốc cho đẹp mắt, cấu trúc rõ ràng.
-3. DỊCH NGHĨA (translation): Dịch phần giải nghĩa sang tiếng Việt.
-4. Trả về JSON gồm 3 keys: "explanation", "formatted_content", và "translation".`;
+2. ĐỊNH DẠNG (formatted_content): Trình bày lại văn bản gốc cho đẹp mắt, cấu trúc rõ ràng (CHỈ dùng Markdown chuẩn: **, *, -, không dùng HTML hay class).
+${!isVietnameseCard ? `3. DỊCH NGHĨA (translation): Dịch phần giải nghĩa sang tiếng Việt.\n4. Trả về JSON gồm 3 keys: "explanation", "formatted_content", và "translation".` : `3. Trả về JSON gồm 2 keys: "explanation", "formatted_content".`}`;
       }
 
       const prompt = `Văn bản gốc cần xử lý:\n${text}`;
@@ -3064,9 +3062,92 @@ ${reminderSuffix}`;
   initVibeRotator();
 
   
+  app.post('/api/vibe/admin/backfill', async (req, res) => {
+    try {
+      const db = admin.firestore();
+      const snap = await db.collection('vibe_decks').get();
+      let count = 0;
+      const batch = db.batch();
+      snap.forEach(doc => {
+        const data = doc.data();
+        if (data.vibe_isHidden === undefined) {
+          batch.update(doc.ref, { vibe_isHidden: false });
+          count++;
+        }
+      });
+      if (count > 0) {
+        await batch.commit();
+      }
+      res.json({ success: true, count });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/vibe/admin/toggle-category', async (req, res) => {
+    try {
+      const { subject, isHidden } = req.body;
+      if (!subject) return res.status(400).json({ error: "Missing subject" });
+
+      const db = admin.firestore();
+      const configRef = db.collection("vibe_settings").doc("dashboard_config");
+      
+      await db.runTransaction(async (transaction) => {
+        const configDoc = await transaction.get(configRef);
+        let hiddenCategories: string[] = [];
+        let hiddenDecksMetadata: any[] = [];
+        
+        if (configDoc.exists) {
+          const data = configDoc.data();
+          hiddenCategories = data?.hiddenCategories || [];
+          hiddenDecksMetadata = data?.hiddenDecksMetadata || [];
+        }
+
+        if (isHidden) {
+          // Admin wants to HIDE the category
+          if (!hiddenCategories.includes(subject)) {
+            hiddenCategories.push(subject);
+          }
+          
+          // Fetch all decks for this subject to extract metadata
+          const decksSnap = await db.collection("vibe_decks").where("subject", "==", subject).get();
+          const newMetadata = decksSnap.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              title: data.title || "Untitled",
+              subject: data.subject || subject,
+              vibe_isHidden: true // flag for frontend
+            };
+          });
+          
+          // Merge metadata
+          hiddenDecksMetadata = [
+            ...hiddenDecksMetadata.filter(m => m.subject !== subject),
+            ...newMetadata
+          ];
+        } else {
+          // Admin wants to UNHIDE the category
+          hiddenCategories = hiddenCategories.filter(c => c !== subject);
+          hiddenDecksMetadata = hiddenDecksMetadata.filter(m => m.subject !== subject);
+        }
+
+        transaction.set(configRef, {
+          hiddenCategories,
+          hiddenDecksMetadata
+        }, { merge: true });
+      });
+
+      res.json({ success: true, subject, isHidden });
+    } catch (error: any) {
+      console.error("Toggle category error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get('/api/vibe/decks', async (req, res, next) => {
     try {
-      const { userId, deckId } = req.query;
+      const { userId, deckId, role } = req.query;
       if (!userId) return res.status(400).json({ error: "Missing userId" });
       
       if (!admin.apps.length) {
@@ -3074,35 +3155,48 @@ ${reminderSuffix}`;
       }
       const db = admin.firestore();
 
-      const cacheKey = `vibe_decks_${userId}_${deckId || 'all'}`;
+      const cacheKey = `vibe_decks_${userId}_${deckId || 'all'}_${role || 'user'}`;
       const cached = myCache.get(cacheKey);
       if (cached) return res.json(cached);
 
-      // --- LẤY DANH SÁCH CATEGORY BỊ ẨN ---
+      // --- FETCH HIDDEN CATEGORIES CONFIG ---
       let hiddenCategories: string[] = [];
+      let hiddenDecksMetadata: any[] = [];
       try {
         const hiddenSnap = await db.collection("vibe_settings").doc("dashboard_config").get();
         if (hiddenSnap.exists) {
-           hiddenCategories = hiddenSnap.data()?.hiddenCategories || [];
+           const data = hiddenSnap.data();
+           hiddenCategories = data?.hiddenCategories || [];
+           hiddenDecksMetadata = data?.hiddenDecksMetadata || [];
         }
       } catch (err) {
         console.error("Failed to fetch hidden categories", err);
       }
 
-      let q = db.collection('vibe_decks'); // GLOBAL POOL VIBE
+      let q: FirebaseFirestore.Query = db.collection('vibe_decks'); // GLOBAL POOL VIBE
+      
+      // OPTIMIZATION: Save reads by filtering AT THE DATABASE LEVEL
+      if (!deckId && hiddenCategories.length > 0) {
+          // Firestore not-in supports up to 10 items.
+          // If > 10, we slice the first 10 to save at least some reads, 
+          // and filter the rest in memory (fallback).
+          const maxNotIn = hiddenCategories.slice(0, 10);
+          q = q.where('subject', 'not-in', maxNotIn);
+      }
+
       const snapshot = await q.get();
       const data: any[] = [];
+      
       snapshot.forEach(doc => {
          const docData = doc.data();
          
-         // Lọc các deck có subject bị ẩn
          let subj = "general";
          if (docData.subject) {
              subj = typeof docData.subject === "string" ? docData.subject : JSON.stringify(docData.subject);
          }
          subj = subj.trim();
          
-         // Nếu deck nằm trong category bị ẩn, BỎ QUA KHÔNG TRẢ VỀ API (chỉ ngoại trừ có deckId cụ thể thì có thể trả về)
+         // Fallback memory filter for > 10 hidden categories
          if (!deckId && hiddenCategories.includes(subj)) {
              return; // Bỏ qua
          }
@@ -3111,6 +3205,12 @@ ${reminderSuffix}`;
             data.push({ id: doc.id, ...docData });
          }
       });
+      
+      // For Admin: Append the metadata of hidden decks so they can see them to unhide
+      // This completely avoids fetching their 'cards' array, saving massive reads/bandwidth!
+      if (!deckId && role === 'admin' && hiddenDecksMetadata.length > 0) {
+          data.push(...hiddenDecksMetadata);
+      }
       
       myCache.set(cacheKey, data, 60); // Cache 60s
       res.json(data);

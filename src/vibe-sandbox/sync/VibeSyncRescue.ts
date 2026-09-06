@@ -214,9 +214,13 @@ export async function smartPushDeck(deckId: string): Promise<string> {
     // 3. Fetch cloud states
     let cloudCardStates: Record<string, any> = {};
     const deckStateRef = doc(db, "users", uid, "vibe_deckStates", deckId);
-    const snap = await getDoc(deckStateRef);
-    if (snap.exists()) {
-        cloudCardStates = snap.data()?.states || {};
+    try {
+        const snap = await getDoc(deckStateRef);
+        if (snap.exists()) {
+            cloudCardStates = snap.data()?.states || {};
+        }
+    } catch (e) {
+        console.warn("getDoc for deckStateRef failed", e);
     }
 
     // 4. Merge LWW
@@ -249,18 +253,26 @@ export async function smartPushDeck(deckId: string): Promise<string> {
 
     // 6. Push to Cloud
     if (Object.keys(mergedCardStates).length > 0) {
-        await setDoc(deckStateRef, removeUndefined({
-            states: mergedCardStates,
-            deckId: deckId,
-            lastUpdatedAt: Date.now()
-        }), { merge: true });
+        try {
+            await setDoc(deckStateRef, removeUndefined({
+                states: mergedCardStates,
+                deckId: deckId,
+                lastUpdatedAt: Date.now()
+            }), { merge: true });
+        } catch (e) {
+            console.warn("setDoc for deckStateRef failed", e);
+        }
     }
 
     // 7. Push session progress
     await VibeProgressSyncManager.pushProgressToCloud(uid, deckId);
 
     // Try flushing the general sync queue as well
-    await VibeSyncEngine.syncNow();
+    try {
+      await VibeSyncEngine.syncNow();
+    } catch (e) {
+      console.warn("VibeSyncEngine.syncNow() failed during smartPushDeck", e);
+    }
 
     return "OK";
   } catch (error: any) {

@@ -1,6 +1,7 @@
 import { VibeSyncEngine } from "./sync/VibeSyncEngine";
 import { useLiveVibeDecks } from "./sync/useLiveVibeDecks";
 import { CardStateManager } from "../lib/CardStateManager";
+import { useHiddenSubjects } from "../hooks/useHiddenSubjects";
 import React, {
   useState,
   useEffect,
@@ -318,6 +319,7 @@ export default function VibeStudentDashboard() {
   const { isFixLagEnabled, toggleFixLag } = useTheme();
   const { click, success, error } = useSound();
   const user = store.getCurrentUser();
+  const { hiddenSubjects } = useHiddenSubjects();
   const prevLevelRef = useRef<number | null>(null);
 
   const [levelUpData, setLevelUpData] = useState<{
@@ -803,7 +805,13 @@ export default function VibeStudentDashboard() {
       return ts;
     };
 
-    return rawDecks.map((deck) => {
+    let filteredDecks = rawDecks;
+    // Filter out hidden subjects if the user is a student
+    if (user?.role !== "admin" && user?.role !== "Admin" && user?.role !== "teacher" && sessionStorage.getItem("adminToken") !== "true") {
+      filteredDecks = rawDecks.filter(deck => !hiddenSubjects.includes(deck.subject || ""));
+    }
+
+    return filteredDecks.map((deck) => {
       const clonedDeck = { ...deck };
       if (clonedDeck.cards) {
         clonedDeck.cards = clonedDeck.cards.map((card) => {
@@ -875,7 +883,7 @@ export default function VibeStudentDashboard() {
       }
       return clonedDeck;
     });
-  }, [rawDecks, personalCardStates]);
+  }, [rawDecks, personalCardStates, hiddenSubjects, user?.role]);
 
   // Sync to global store transparently
   useEffect(() => {

@@ -40,6 +40,12 @@ service cloud.firestore {
       match /vibe_metrics/{metricId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
+      match /vibe_deckStates/{deckId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      match /studyProgress/{deckId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
 
     // Match block for Study Sets (Decks) - matches User requirements exactly

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { 
   Users, UserPlus, BookOpen, BarChart3, Plus, Trash2, 
   Settings, ChevronRight, Copy, Check, Clock, Play, Folder, FolderOpen,
-  MoreVertical, Share2, DownloadCloud
+  MoreVertical, Share2, DownloadCloud, Eye, EyeOff
 } from "lucide-react";
 import { store, Deck } from "../lib/store";
 import { Link } from "react-router-dom";
@@ -15,6 +15,7 @@ import { isFeatureEnabled } from "../features.config";
 import { VibeStickyStudyNav, VibeNavGroup } from "./VibeStickyStudyNav";
 import { cn } from "../lib/utils";
 import { DeckOptionsMenu } from "../components/DeckOptionsMenu";
+import { useHiddenSubjects } from "../hooks/useHiddenSubjects";
 
 interface VibeClass {
   id: string;
@@ -28,6 +29,7 @@ interface VibeClass {
 export const VibeClasses: React.FC = () => {
   const [classes, setClasses] = useState<VibeClass[]>([]);
   const [activeClassId, setActiveClassId] = useState<string | null>(null);
+  const { hiddenSubjects, toggleHiddenSubject } = useHiddenSubjects();
   
   const [isCreating, setIsCreating] = useState(false);
   const [newClassName, setNewClassName] = useState("");
@@ -405,9 +407,10 @@ export const VibeClasses: React.FC = () => {
                             {subjects.map(subject => {
                               const decksInSubject = grouped[subject];
                               const isExpanded = !!expandedSubjects[subject];
+                              const isHidden = hiddenSubjects.includes(subject);
 
                               return (
-                                <div key={subject} className="border border-zinc-150 dark:border-zinc-800/80 rounded-xl overflow-hidden bg-zinc-50/30 dark:bg-zinc-900/10">
+                                <div key={subject} className={cn("border border-zinc-150 dark:border-zinc-800/80 rounded-xl overflow-hidden bg-zinc-50/30 dark:bg-zinc-900/10 transition-all", isHidden && "opacity-60 grayscale")}>
                                   {/* Tiêu đề phân mục */}
                                   <div
                                     onClick={() => {
@@ -423,8 +426,11 @@ export const VibeClasses: React.FC = () => {
                                         {isExpanded ? <FolderOpen className="w-4 h-4 text-orange-500" /> : <Folder className="w-4 h-4 text-orange-500" />}
                                       </div>
                                       <div>
-                                        <h4 className="font-bold text-sm capitalize text-zinc-800 dark:text-zinc-200">
+                                        <h4 className="font-bold text-sm capitalize text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
                                           Phân mục: {subject}
+                                          {isHidden && (
+                                            <span className="text-[9px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded uppercase tracking-wider">Đã Ẩn</span>
+                                          )}
                                         </h4>
                                         <p className="text-[11px] text-zinc-500 font-medium">
                                           {decksInSubject.length} học phần
@@ -432,6 +438,18 @@ export const VibeClasses: React.FC = () => {
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          toggleHiddenSubject(subject);
+                                          toast.success(isHidden ? `Đã hiện phân mục ${subject}` : `Đã ẩn phân mục ${subject}`);
+                                        }}
+                                        className={cn("p-1.5 rounded-lg transition", isHidden ? "text-red-500 hover:bg-red-500/10" : "text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800")}
+                                        title={isHidden ? "Đang ẩn với học viên. Bấm để hiện." : "Đang hiển thị. Bấm để ẩn với học viên."}
+                                      >
+                                        {isHidden ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                      </button>
                                       <div className="relative z-30">
                                         <button
                                           onClick={(e) => {

@@ -36,7 +36,7 @@ import {
   Bell,
   BellOff,
   BellRing,
-  Settings,
+  Settings, RefreshCw,
   AlertTriangle,
   Trash2,
   Snowflake,
@@ -321,6 +321,51 @@ export default function VibeStudentDashboard() {
   const user = store.getCurrentUser();
   const { hiddenSubjects } = useHiddenSubjects();
   const prevLevelRef = useRef<number | null>(null);
+
+  const [isPulling, setIsPulling] = useState(false);
+
+  const pullCloudData = useCallback(async (showToast = false) => {
+    if (!user) return;
+    setIsPulling(true);
+    if (showToast) {
+       toast.loading("Đang kiểm tra tiến trình trên mây...", { id: "pull-sync" });
+    }
+    
+    try {
+      const count = await VibeSyncEngine.pullLatestCardStates(user.id);
+      if (showToast) {
+        if (count > 0) {
+           toast.success(`Đồng bộ thành công! Kéo về ${count} thay đổi từ thiết bị khác.`, { id: "pull-sync" });
+        } else {
+           toast.success("Dữ liệu của bạn đã là mới nhất.", { id: "pull-sync" });
+        }
+      } else {
+         if (count > 0) {
+            toast.success(`🎉 Đã tự động cập nhật ${count} thẻ từ thiết bị khác!`);
+         }
+      }
+    } catch (err) {
+       if (showToast) toast.error("Không thể đồng bộ. Vui lòng kiểm tra kết nối.", { id: "pull-sync" });
+    } finally {
+       setIsPulling(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    // Initial auto-pull
+    pullCloudData(false);
+
+    // Tab visibility auto-pull
+    const handleVisibilityChange = () => {
+       if (document.visibilityState === "visible") {
+           pullCloudData(false);
+       }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [pullCloudData]);
+
+
 
   const [levelUpData, setLevelUpData] = useState<{
     level: number;
@@ -2213,6 +2258,18 @@ export default function VibeStudentDashboard() {
                   <TrendingUp className="w-5 h-5" />
                   Weekly Points: <AnimatedCounter value={user?.points || 0} />
                 </div>
+                <button 
+                  onClick={() => pullCloudData(true)} 
+                  disabled={isPulling}
+                  className={cn(
+                    "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-emerald-600 dark:text-emerald-400 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm transition-all hover:scale-105 active:scale-95",
+                    isPulling && "opacity-50 cursor-not-allowed grayscale"
+                  )}
+                  title="Kiểm tra đồng bộ tiến trình học mới nhất từ máy khác về thiết bị này"
+                >
+                  <RefreshCw className={cn("w-4 h-4", isPulling && "animate-spin")} />
+                  {isPulling ? "Đang kéo mây..." : "Đồng bộ thủ công"}
+                </button>
               </div>
             </div>
           </motion.section>

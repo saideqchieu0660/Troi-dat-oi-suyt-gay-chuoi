@@ -2114,6 +2114,14 @@ export default function TeacherDashboard() {
                                       ({subjectDecks.length} bộ)
                                     </span>
                                   </h4>
+                                  <button
+                                    type="button"
+                                    title={hiddenCategories.includes(subject) ? "Đang ẩn với học viên. Nhấn để hiện." : "Đang hiện với học viên. Nhấn để ẩn."}
+                                    onClick={(e) => toggleCategoryVisibility(subject, e)}
+                                    className={`ml-2 p-1.5 rounded-full transition-colors border-none cursor-pointer flex items-center justify-center ${hiddenCategories.includes(subject) ? 'bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-950 dark:text-red-400' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-400'}`}
+                                  >
+                                    {hiddenCategories.includes(subject) ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                  </button>
                                 </div>
                                 <div
                                   className="flex items-center gap-2 shrink-0"

@@ -319,7 +319,7 @@ export default function VibeStudentDashboard() {
   const { isFixLagEnabled, toggleFixLag } = useTheme();
   const { click, success, error } = useSound();
   const user = store.getCurrentUser();
-  const { hiddenSubjects } = useHiddenSubjects();
+  const { hiddenCategories: hiddenSubjects } = useHiddenSubjects();
   const prevLevelRef = useRef<number | null>(null);
 
   const [isPulling, setIsPulling] = useState(false);

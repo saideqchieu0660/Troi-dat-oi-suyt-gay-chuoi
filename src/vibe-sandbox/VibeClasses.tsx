@@ -29,7 +29,7 @@ interface VibeClass {
 export const VibeClasses: React.FC = () => {
   const [classes, setClasses] = useState<VibeClass[]>([]);
   const [activeClassId, setActiveClassId] = useState<string | null>(null);
-  const { hiddenSubjects, toggleHiddenSubject } = useHiddenSubjects();
+  const { hiddenCategories: hiddenSubjects, toggleHiddenSubject } = useHiddenSubjects();
   
   const [isCreating, setIsCreating] = useState(false);
   const [newClassName, setNewClassName] = useState("");

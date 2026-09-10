@@ -3,15 +3,15 @@ import { db } from '../lib/firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 export function useHiddenSubjects() {
-  const [hiddenSubjects, setHiddenSubjects] = useState<string[]>([]);
+  const [hiddenCategories, setHiddenSubjects] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, 'system_config', 'library_settings'), (docSnap) => {
+    const unsubscribe = onSnapshot(doc(db, 'vibe_settings', 'dashboard_config'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        if (data && Array.isArray(data.hiddenSubjects)) {
-          setHiddenSubjects(data.hiddenSubjects);
+        if (data && Array.isArray(data.hiddenCategories)) {
+          setHiddenSubjects(data.hiddenCategories);
         } else {
           setHiddenSubjects([]);
         }
@@ -28,15 +28,15 @@ export function useHiddenSubjects() {
 
   const toggleHiddenSubject = async (subject: string) => {
     try {
-      const newHidden = hiddenSubjects.includes(subject)
-        ? hiddenSubjects.filter((s) => s !== subject)
-        : [...hiddenSubjects, subject];
+      const newHidden = hiddenCategories.includes(subject)
+        ? hiddenCategories.filter((s) => s !== subject)
+        : [...hiddenCategories, subject];
       
       // Optimistic update
       setHiddenSubjects(newHidden);
 
-      await setDoc(doc(db, 'system_config', 'library_settings'), { 
-        hiddenSubjects: newHidden, 
+      await setDoc(doc(db, 'vibe_settings', 'dashboard_config'), { 
+        hiddenCategories: newHidden, 
         updatedAt: new Date().toISOString() 
       }, { merge: true });
     } catch (e) {
@@ -46,5 +46,5 @@ export function useHiddenSubjects() {
     }
   };
 
-  return { hiddenSubjects, toggleHiddenSubject, isLoading };
+  return { hiddenCategories, toggleHiddenSubject, isLoading };
 }

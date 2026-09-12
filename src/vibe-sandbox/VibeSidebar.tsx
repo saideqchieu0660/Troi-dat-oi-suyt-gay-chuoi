@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { store, Deck } from "../lib/store";
+import { useHiddenSubjects } from "../hooks/useHiddenSubjects";
 import { cn } from "../lib/utils";
 import { isFeatureEnabled } from "../features.config";
 import { VibeStudyEntryModal } from "./VibeStudyEntryModal";
@@ -68,6 +69,8 @@ export const VibeSidebar: React.FC<VibeSidebarProps> = ({
   });
 
   const [decks, setDecks] = useState<Deck[]>(() => store.getDecks());
+  const { hiddenCategories: hiddenSubjects } = useHiddenSubjects();
+  const user = store.getCurrentUser();
   const [pinnedDecks, setPinnedDecks] = useState<string[]>(() => {
     const currentUser = store.getCurrentUser();
     const saved = localStorage.getItem(`pinned_decks_${currentUser?.id || 'guest'}`);
@@ -148,12 +151,16 @@ export const VibeSidebar: React.FC<VibeSidebarProps> = ({
     }
 
     decks.forEach((deck) => {
+      const rawSubj = (typeof deck.subject === "string" ? deck.subject : JSON.stringify(deck.subject)) || "";
+      if (hiddenSubjects.includes(rawSubj.trim())) {
+          return;
+      }
       const subj = deck.subject || "Thư mục chung";
       if (!groups[subj]) groups[subj] = [];
       groups[subj].push(deck);
     });
     return groups;
-  }, [decks, pinnedDecks]);
+  }, [decks, pinnedDecks, hiddenSubjects]);
 
   const currentPath = location.pathname;
 

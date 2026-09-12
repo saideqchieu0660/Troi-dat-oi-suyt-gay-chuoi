@@ -830,7 +830,14 @@ export default function VibeStudentDashboard() {
 
   // 3. Merge raw decks and personal card states to form localDecks and store
   const localDecks = useMemo(() => {
-    if (rawDecks.length === 0) return store.getDecks();
+    if (rawDecks.length === 0) {
+      let storeDecks = store.getDecks();
+      storeDecks = storeDecks.filter(deck => {
+          const subj = (typeof deck.subject === "string" ? deck.subject : JSON.stringify(deck.subject)) || "";
+          return !hiddenSubjects.includes(subj.trim());
+        });
+      return storeDecks;
+    }
 
     const stateMap = new Map();
     if (personalCardStates && personalCardStates.length > 0) {
@@ -852,9 +859,10 @@ export default function VibeStudentDashboard() {
 
     let filteredDecks = rawDecks;
     // Filter out hidden subjects if the user is a student
-    if (user?.role !== "admin" && user?.role !== "Admin" && user?.role !== "teacher" && sessionStorage.getItem("adminToken") !== "true") {
-      filteredDecks = rawDecks.filter(deck => !hiddenSubjects.includes(deck.subject || ""));
-    }
+    filteredDecks = rawDecks.filter(deck => {
+        const subj = (typeof deck.subject === "string" ? deck.subject : JSON.stringify(deck.subject)) || "";
+        return !hiddenSubjects.includes(subj.trim());
+      });
 
     return filteredDecks.map((deck) => {
       const clonedDeck = { ...deck };
